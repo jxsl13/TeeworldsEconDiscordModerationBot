@@ -171,30 +171,32 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 
 	if strings.Contains(line, "[server]") {
 
-		if config.LogLevel >= 1 {
-			matches := playerJoinRegex.FindStringSubmatch(line)
-			if len(matches) == (1 + 3) {
+		matches := playerJoinRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 3) {
 
-				id, _ := strconv.Atoi(matches[1])
-				name := matches[3]
-				address := matches[2]
-				server.join(id, player{Name: name, ID: id, Address: address})
+			id, _ := strconv.Atoi(matches[1])
+			name := matches[3]
+			address := matches[2]
+			server.join(id, player{Name: name, ID: id, Address: address})
 
-				result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
+			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
+			if config.LogLevel >= 1 {
 				send = true
-				return
 			}
+			return
+		}
 
-			matches = playerLeaveRegex.FindStringSubmatch(line)
-			if len(matches) == (1 + 3) {
-				id, _ := strconv.Atoi(matches[1])
-				name := matches[3]
-				server.leave(id)
+		matches = playerLeaveRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 3) {
+			id, _ := strconv.Atoi(matches[1])
+			name := matches[3]
+			server.leave(id)
 
-				result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
+			result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
+			if config.LogLevel >= 1 {
 				send = true
-				return
 			}
+			return
 		}
 
 		matches := startVotekickRegex.FindStringSubmatch(line)
