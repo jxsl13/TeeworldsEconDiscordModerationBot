@@ -23,7 +23,7 @@ type configuration struct {
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
 	DiscordCommandQueue      map[address]chan command
-	LogLevel                 int // 0 : chat & votes & rcon,  1: & join & leave,  2: & whisper // TODO
+	LogLevel                 int // 0 : chat & votes & rcon,  1: & join & leave,  2: & whisper
 
 }
 

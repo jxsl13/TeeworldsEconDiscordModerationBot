@@ -118,6 +118,16 @@ func init() {
 		config.DiscordCommandQueue[address(addr)] = make(chan command)
 	}
 
+	logLevel, ok := env["LOG_LEVEL"]
+	if ok && len(logLevel) > 0 {
+		level, err := strconv.Atoi(logLevel)
+		if err != nil {
+			log.Printf("Invalid value for LOG_LEVEL: %s", logLevel)
+		} else {
+			config.LogLevel = level
+		}
+	}
+
 	log.Printf("\n%s", config.String())
 }
 
@@ -130,7 +140,7 @@ func parseCommandLine(cmd string) (line string, send bool, err error) {
 			sb.WriteString("Available Commands: \n")
 			sb.WriteString("```")
 			for _, cmd := range config.DiscordModeratorCommands.Commands() {
-				sb.WriteString(fmt.Sprintf("%s\n", cmd))
+				sb.WriteString(fmt.Sprintf("?%s\n", cmd))
 			}
 			sb.WriteString("```")
 
@@ -161,31 +171,33 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 
 	if strings.Contains(line, "[server]") {
 
-		matches := playerJoinRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
+		if config.LogLevel >= 1 {
+			matches := playerJoinRegex.FindStringSubmatch(line)
+			if len(matches) == (1 + 3) {
 
-			id, _ := strconv.Atoi(matches[1])
-			name := matches[3]
-			address := matches[2]
-			server.join(id, player{Name: name, ID: id, Address: address})
+				id, _ := strconv.Atoi(matches[1])
+				name := matches[3]
+				address := matches[2]
+				server.join(id, player{Name: name, ID: id, Address: address})
 
-			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
-			send = true
-			return
+				result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
+				send = true
+				return
+			}
+
+			matches = playerLeaveRegex.FindStringSubmatch(line)
+			if len(matches) == (1 + 3) {
+				id, _ := strconv.Atoi(matches[1])
+				name := matches[3]
+				server.leave(id)
+
+				result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
+				send = true
+				return
+			}
 		}
 
-		matches = playerLeaveRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
-			id, _ := strconv.Atoi(matches[1])
-			name := matches[3]
-			server.leave(id)
-
-			result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
-			send = true
-			return
-		}
-
-		matches = startVotekickRegex.FindStringSubmatch(line)
+		matches := startVotekickRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 7) {
 			kickingID, _ := strconv.Atoi(matches[1])
 			kickingName := matches[2]
