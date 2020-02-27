@@ -373,11 +373,16 @@ func main() {
 		case "clean":
 			msg, _ := s.ChannelMessageSend(m.ChannelID, "starting channel cleanup...")
 
-			for msgs, err := s.ChannelMessages(msg.ChannelID, 100, msg.ID, "", ""); len(msgs) > 0 && err == nil; {
+			initialID := msg.ChannelID
+			for msgs, err := s.ChannelMessages(initialID, 100, msg.ID, "", ""); len(msgs) > 0 && err == nil; {
 				if err != nil {
 					log.Printf("error while cleaning up a channel: %s\n", err.Error())
 					break
 				}
+				if len(msgs) == 0 {
+					break
+				}
+
 				msgIDs := make([]string, 0, len(msgs))
 
 				for _, msg := range msgs {
@@ -393,9 +398,12 @@ func main() {
 					s.ChannelMessageDelete(msg.ChannelID, msg.ID)
 					return
 				}
+
+				initialID = msgIDs[len(msgIDs)-1]
 			}
 
 			s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+			s.ChannelMessageSend(m.ChannelID, "cleanup done!")
 
 		case "moderate":
 
