@@ -34,8 +34,8 @@ func (a *channelAddressMap) AlreadyRegistered(addr address) (found bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	for _, addr := range a.m {
-		if addr == addr {
+	for _, serverAddr := range a.m {
+		if serverAddr == addr {
 			found = true
 			return
 		}
