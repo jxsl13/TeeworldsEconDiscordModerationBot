@@ -16,8 +16,14 @@ This example configuration must live in the same folder as the executable and ne
 DISCORD_TOKEN=1234567890
 DISCORD_ADMIN="nickname#1234"
 
+DISCORD_MODERATORS="nickname#12345 nickname2#3456"
+DISCORD_MODERATOR_ROLE="Server Moderator"
+DISCORD_MODERATOR_COMMANDS="status vote say mute unmute mutes voteban unvoteban unvoteban_client votebans ban unban set_team"
+
 ECON_SERVERS=127.0.0.1:9303 127.0.0.1:9304
 ECON_PASSWORDS=abcdefghijkl
+
+LOG_LEVEL=0
 ```
 
 ## Usage

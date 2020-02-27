@@ -1,6 +1,8 @@
 package main
 
-import "sync"
+import (
+	"sync"
+)
 
 type userSet struct {
 	mu sync.Mutex
@@ -9,6 +11,18 @@ type userSet struct {
 
 func newUserSet() userSet {
 	return userSet{m: make(map[string]bool)}
+}
+
+func (u *userSet) Users() (users []string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	users = make([]string, 0, len(u.m))
+
+	for user := range u.m {
+		users = append(users, user)
+	}
+	return
 }
 
 func (u *userSet) Contains(s string) bool {

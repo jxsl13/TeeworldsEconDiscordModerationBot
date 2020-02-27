@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,22 +19,139 @@ import (
 )
 
 var (
+	config = configuration{}
+
 	playerJoinRegex    = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
 	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
 	startVotekickRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted kick '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
+	startSpecVoteRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	executeRconCommand = regexp.MustCompile(`\[server\]: ClientID=([\d]{1,2}) rcon='(.*)'$`)
 	chatRegex          = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:([^:]{1,16}):(.*)$`)
 
 	bansListRegex         = regexp.MustCompile(`\[net_ban\]: (.*)`)
 	mutesAndVotebansRegex = regexp.MustCompile(`\[Server\]: (.*)`)
+
+	moderatorMentions = regexp.MustCompile(`\[chat\]: .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*`)
 )
 
-type command struct {
-	Author  string
-	Command string
+func init() {
+
+	config = configuration{
+		EconPasswords:            make(map[address]password),
+		ServerStates:             make(map[address]*server),
+		ChannelAddress:           newChannelAddressMap(),
+		DiscordModerators:        newUserSet(),
+		DiscordModeratorCommands: newCommandSet(),
+		DiscordCommandQueue:      make(map[address]chan command),
+	}
+
+	env, err := godotenv.Read(".env")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	discordToken, ok := env["DISCORD_TOKEN"]
+
+	if !ok || len(discordToken) == 0 {
+		log.Fatal("error: no DISCORD_TOKEN specified")
+	}
+	config.DiscordToken = discordToken
+
+	discordAdmin, ok := env["DISCORD_ADMIN"]
+	if !ok || len(discordAdmin) == 0 {
+		log.Fatal("error: no DISCORD_ADMIN specified")
+	}
+	config.DiscordAdmin = discordAdmin
+	config.DiscordModerators.Add(discordAdmin)
+
+	econServers, ok := env["ECON_SERVERS"]
+
+	if !ok || len(econServers) == 0 {
+		log.Fatal("error: no ECON_SERVERS specified")
+	}
+
+	econPasswords, ok := env["ECON_PASSWORDS"]
+	if !ok || len(econPasswords) == 0 {
+		log.Fatal("error: no ECON_PASSWORDS specified")
+	}
+
+	moderators, ok := env["DISCORD_MODERATORS"]
+	if ok && len(moderators) > 0 {
+		for _, moderator := range strings.Split(env["DISCORD_MODERATORS"], " ") {
+			config.DiscordModerators.Add(moderator)
+		}
+	}
+
+	commands, ok := env["DISCORD_MODERATOR_COMMANDS"]
+	if ok {
+		allowedCommands := strings.Split(commands, " ")
+		for _, cmd := range allowedCommands {
+			config.DiscordModeratorCommands.Add(cmd)
+		}
+	}
+
+	moderatorRole, ok := env["DISCORD_MODERATOR_ROLE"]
+	if ok && len(moderatorRole) > 0 {
+		config.DiscordModeratorRole = moderatorRole
+	}
+
+	servers := strings.Split(econServers, " ")
+	passwords := strings.Split(econPasswords, " ")
+
+	// fill list with first password
+	if len(passwords) == 1 && len(servers) > 1 {
+		for i := 1; i < len(servers); i++ {
+			passwords = append(passwords, passwords[0])
+		}
+	} else if len(passwords) != len(servers) {
+		log.Fatal("ECON_SERVERS and ECON_PASSWORDS mismatch")
+	} else if len(servers) == 0 {
+		log.Fatal("No ECON_SERVERS and/or ECON_PASSWORDS specified.")
+	}
+
+	for idx, addr := range servers {
+		config.EconPasswords[address(addr)] = password(passwords[idx])
+	}
+
+	for _, addr := range servers {
+		config.ServerStates[address(addr)] = &server{}
+		config.DiscordCommandQueue[address(addr)] = make(chan command)
+	}
+
+	log.Printf("\n%s", config.String())
 }
 
-func parseCommandLine(cmd string) (line string, send bool) {
+func parseCommandLine(cmd string) (line string, send bool, err error) {
+	args := strings.Split(cmd, " ")
+	if len(args) > 0 {
+		// help is not part of the commands
+		if args[0] == "help" {
+			sb := strings.Builder{}
+			sb.WriteString("Available Commands: \n")
+			sb.WriteString("```")
+			for _, cmd := range config.DiscordModeratorCommands.Commands() {
+				sb.WriteString(fmt.Sprintf("%s\n", cmd))
+			}
+			sb.WriteString("```")
+
+			sb.WriteString("Moderators:\n")
+			sb.WriteString("```")
+			for _, moderator := range config.DiscordModerators.Users() {
+				sb.WriteString(fmt.Sprintf("%s\n", moderator))
+			}
+			sb.WriteString("```")
+
+			err = errors.New(sb.String())
+			return
+		}
+
+		// all allowed commands
+		if !config.DiscordModeratorCommands.Contains(args[0]) {
+			err = fmt.Errorf("access to command %q denied", args[0])
+			return
+		}
+	}
+
 	line = cmd
 	send = true
 	return
@@ -42,8 +160,10 @@ func parseCommandLine(cmd string) (line string, send bool) {
 func parseEconLine(line string, server *server) (result string, send bool) {
 
 	if strings.Contains(line, "[server]") {
+
 		matches := playerJoinRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 3) {
+
 			id, _ := strconv.Atoi(matches[1])
 			name := matches[3]
 			address := matches[2]
@@ -75,7 +195,22 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 
 			reason := matches[5]
 
-			result = fmt.Sprintf("[kickvote]: '%d:%s' started to kick '%d:%s' with reason '%s'", kickingID, kickingName, kickedID, kickedName, reason)
+			result = fmt.Sprintf("**[kickvote]**: '%d:%s' started to kick '%d:%s' with reason '%s'", kickingID, kickingName, kickedID, kickedName, reason)
+			send = true
+			return
+		}
+
+		matches = startSpecVoteRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 7) {
+			votingID, _ := strconv.Atoi(matches[1])
+			votingName := matches[2]
+
+			votedID, _ := strconv.Atoi(matches[3])
+			votedName := matches[4]
+
+			reason := matches[5]
+
+			result = fmt.Sprintf("**[specvote]**: '%d:%s' wants to move '%d:%s' to spectators with reason '%s'", votingID, votingName, votedID, votedName, reason)
 			send = true
 			return
 		}
@@ -98,7 +233,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		name := server.PlayerName(adminID)
 		command := matches[2]
 
-		result = fmt.Sprintf("[rcon]: '%s' command='%s'", name, command)
+		result = fmt.Sprintf("**[rcon]**: '%s' command='%s'", name, command)
 		send = true
 		return
 	}
@@ -120,76 +255,13 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 	}
 
 	return
+
 }
 
 func main() {
-	env, err := godotenv.Read(".env")
-	if err != nil {
-		log.Fatal(err)
-	}
+	defer config.Close()
 
-	discordToken := env["DISCORD_TOKEN"]
-
-	if discordToken == "" {
-		log.Fatal("error: no DISCORD_TOKEN specified")
-	}
-
-	discordAdmin := env["DISCORD_ADMIN"]
-
-	if discordToken == "" {
-		log.Fatal("error: no DISCORD_ADMINS specified")
-	}
-
-	econServersEnv := env["ECON_SERVERS"]
-
-	if econServersEnv == "" {
-		log.Fatal("error: no ECON_SERVERS specified")
-	}
-
-	econPasswordsEnv := env["ECON_PASSWORDS"]
-
-	if econPasswordsEnv == "" {
-		log.Fatal("error: no ECON_PASSWORDS specified")
-	}
-
-	moderators := newUserSet()
-	moderators.Add(discordAdmin)
-
-	for _, moderator := range strings.Split(env["DISCORD_MODERATORS"], " ") {
-		moderators.Add(moderator)
-	}
-
-	econServers := strings.Split(econServersEnv, " ")
-	econPasswords := strings.Split(econPasswordsEnv, " ")
-
-	// fill list with first password
-	if len(econPasswords) == 1 && len(econServers) > 1 {
-		for i := 1; i < len(econServers); i++ {
-			econPasswords = append(econPasswords, econPasswords[0])
-		}
-	} else if len(econPasswords) != len(econServers) {
-		log.Fatal("ECON_SERVERS and ECON_PASSWORDS mismatch")
-	} else if len(econServers) == 0 {
-		log.Fatal("No ECON_SERVERS specified.")
-	}
-
-	passwordCache := make(map[string]string, len(econServers))
-
-	for idx, address := range econServers {
-		passwordCache[address] = econPasswords[idx]
-	}
-
-	serverStateCache := make(map[string]*server, len(passwordCache))
-
-	channelAddressMap := newChannelAddressMap()
-	econCommandChannels := make(map[string]chan command)
-
-	for _, address := range econServers {
-		serverStateCache[address] = &server{}
-		econCommandChannels[address] = make(chan command)
-	}
-
-	dg, err := discordgo.New("Bot " + discordToken)
+	dg, err := discordgo.New("Bot " + config.DiscordToken)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -202,11 +274,11 @@ func main() {
 		}
 
 		if strings.HasPrefix(m.Content, "?") {
-			if !moderators.Contains(m.Author.String()) {
+			if !config.DiscordModerators.Contains(m.Author.String()) {
 				return
 			}
 
-			addr, ok := channelAddressMap.Get(m.ChannelID)
+			addr, ok := config.ChannelAddress.Get(discordChannel(m.ChannelID))
 			if !ok {
 				log.Printf("Request from invalid channel by user %s", m.Author.String())
 				return
@@ -215,30 +287,37 @@ func main() {
 
 			// handle status from cache data
 			if cmd == "status" {
-				players := serverStateCache[addr].Status()
+				if config.DiscordModeratorCommands.Contains(cmd) {
+					players := config.ServerStates[addr].Status()
 
-				if len(players) == 0 {
-					s.ChannelMessageSend(m.ChannelID, "There are currently no players online.")
+					if len(players) == 0 {
+						s.ChannelMessageSend(m.ChannelID, "There are currently no players online.")
+						return
+					}
+
+					sb := strings.Builder{}
+					sb.WriteString("```")
+					for _, p := range players {
+						sb.WriteString(fmt.Sprintf("id=%-2d %s\n", p.ID, p.Name))
+					}
+					sb.WriteString("```")
+
+					_, err := s.ChannelMessageSend(m.ChannelID, sb.String())
+					if err != nil {
+						log.Printf("error while sending status message: %s", err.Error())
+					}
+
 					return
 				}
 
-				sb := strings.Builder{}
-				sb.WriteString("```")
-				for _, p := range players {
-					sb.WriteString(fmt.Sprintf("id=%-2d %s", p.ID, p.Name))
-				}
-				sb.WriteString("```")
-
-				_, err := s.ChannelMessageSend(m.ChannelID, sb.String())
+				_, err := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Access to the command %q denied.", cmd))
 				if err != nil {
 					log.Printf("error while sending status message: %s", err.Error())
 				}
-
-				return
 			}
 
 			// send other messages this way
-			econCommandChannels[addr] <- command{Author: m.Author.String(), Command: cmd}
+			config.DiscordCommandQueue[addr] <- command{Author: m.Author.String(), Command: cmd}
 			return
 
 		}
@@ -247,8 +326,8 @@ func main() {
 			return
 		}
 
-		if m.Author.String() != discordAdmin {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Not an admin, only '%s' is allowed to execute commands.", discordAdmin))
+		if m.Author.String() != config.DiscordAdmin {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Not an admin, only '%s' is allowed to execute commands.", config.DiscordAdmin))
 			return
 		}
 
@@ -259,25 +338,32 @@ func main() {
 		}
 
 		command := args[0][1:]
+		arguments := strings.Join(args[1:], " ")
 
 		switch command {
 		case "add":
-			moderators.Add(strings.Trim(command, " \n"))
+			user := strings.Trim(arguments, " \n")
+			config.DiscordModerators.Add(user)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Added %q to moderators", user))
 			return
 		case "remove":
-			moderators.Remove(strings.Trim(command, " \n"))
+			user := strings.Trim(arguments, " \n")
+			config.DiscordModerators.Remove(user)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Removed %q from moderators", user))
 			return
 		case "purge":
-			moderators.Reset()
-			moderators.Add(discordAdmin)
+			config.DiscordModerators.Reset()
+			config.DiscordModerators.Add(config.DiscordAdmin)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Purged all moderators except %q", config.DiscordAdmin))
 			return
 		case "moderate":
 
 			if len(args) < 2 {
 				break
 			}
-			addr := args[1]
-			password, ok := passwordCache[addr]
+			addr := address(args[1])
+			pass, ok := config.EconPasswords[addr]
+			currentChannel := discordChannel(m.ChannelID)
 
 			if !ok {
 				s.ChannelMessageSend(m.ChannelID, "unknown server address")
@@ -285,15 +371,15 @@ func main() {
 			}
 
 			// handle single time registration with a discord channel
-			if channelAddressMap.AlreadyRegistered(addr) {
+			if config.ChannelAddress.AlreadyRegistered(addr) {
 				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The address %s is already registered with a channel.", addr))
 				return
 			}
-			channelAddressMap.Set(m.ChannelID, addr)
+			config.ChannelAddress.Set(currentChannel, addr)
 
 			// start routine to listen to specified server.
-			go func(ctx context.Context, channelID, initialMessageID string, s *discordgo.Session, address, password string) {
-				conn, err := econ.DialTo(address, password)
+			go func(ctx context.Context, channelID, initialMessageID string, s *discordgo.Session, addr address, pass password) {
+				conn, err := econ.DialTo(string(addr), string(pass))
 				if err != nil {
 					s.ChannelMessageSend(m.ChannelID, err.Error())
 					return
@@ -331,6 +417,7 @@ func main() {
 									continue
 								}
 
+								// TODO: make variable
 								if time.Since(created) > 24*time.Hour {
 
 									err := s.ChannelMessageDelete(channelID, message.ID)
@@ -346,25 +433,28 @@ func main() {
 					}
 				}(channelID, initialMessageID, s)
 
-				go func() {
+				go func(addr address, channelID string, s *discordgo.Session) {
 					for {
 						select {
 						case <-ctx.Done():
 							return
-						case cmd, ok := <-econCommandChannels[address]:
+						case cmd, ok := <-config.DiscordCommandQueue[addr]:
 							if !ok {
 								return
 							}
 
-							lineToExecute, send := parseCommandLine(cmd.Command)
+							lineToExecute, send, err := parseCommandLine(cmd.Command)
+							if err != nil {
+								s.ChannelMessageSend(channelID, err.Error())
+								continue
+							}
 							if send {
-								conn.WriteLine(fmt.Sprintf("echo User '%s' executed rcon '%s'", strings.Replace(cmd.Author, "#", "_", -1), lineToExecute))
+								conn.WriteLine(fmt.Sprintf("echo [Discord] user '%s' executed rcon '%s'", strings.Replace(cmd.Author, "#", "_", -1), lineToExecute))
 								conn.WriteLine(lineToExecute)
 							}
-
 						}
 					}
-				}()
+				}(addr, channelID, s)
 
 				// handle econ line parsing
 				result := make(chan string)
@@ -388,8 +478,29 @@ func main() {
 						return
 					case line := <-result:
 						// if read avalable, parse and if necessary, send
-						line, send := parseEconLine(line, serverStateCache[address])
+						line, send := parseEconLine(line, config.ServerStates[addr])
 						if send {
+
+							// check for moderator mention
+							matches := moderatorMentions.FindStringSubmatch(line)
+							if len(matches) == (1 + 1) {
+								mention := matches[1]
+
+								roles, _ := s.GuildRoles(m.GuildID)
+
+								mentionReplace := ""
+								for _, role := range roles {
+									if strings.Contains(role.Name, config.DiscordModeratorRole) {
+										mentionReplace = role.Mention()
+										break
+									}
+								}
+
+								if len(mentionReplace) > 0 {
+									line = strings.ReplaceAll(line, mention, mentionReplace)
+								}
+							}
+
 							_, err := s.ChannelMessageSend(channelID, line)
 							if err != nil {
 								log.Printf("error while sending line: %s\n", err.Error())
@@ -399,7 +510,7 @@ func main() {
 					}
 				}
 
-			}(ctx, m.ChannelID, m.ID, s, addr, password)
+			}(ctx, m.ChannelID, m.ID, s, addr, pass)
 
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Started listening to server %s", addr))
 			return
@@ -423,8 +534,5 @@ func main() {
 	<-sc
 	cancel()
 
-	for _, address := range econServers {
-		close(econCommandChannels[address])
-	}
 	log.Println("Shutting down, please wait...")
 }
