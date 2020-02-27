@@ -370,6 +370,33 @@ func main() {
 			config.DiscordModerators.Add(config.DiscordAdmin)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Purged all moderators except %q", config.DiscordAdmin))
 			return
+		case "clean":
+			msg, _ := s.ChannelMessageSend(m.ChannelID, "starting channel cleanup...")
+
+			for msgs, err := s.ChannelMessages(msg.ChannelID, 100, msg.ID, "", ""); len(msgs) > 0 && err == nil; {
+				if err != nil {
+					log.Printf("error while cleaning up a channel: %s\n", err.Error())
+					break
+				}
+				msgIDs := make([]string, 0, len(msgs))
+
+				for _, msg := range msgs {
+					msgIDs = append(msgIDs, msg.ID)
+				}
+
+				delErr := s.ChannelMessagesBulkDelete(msg.ChannelID, msgIDs)
+				if delErr != nil {
+					log.Printf("error while trying to bulk delete %d messages: %s", len(msgIDs), delErr)
+					s.ChannelMessageSend(msg.ChannelID, "The bot does not have enough permissions to cleanup the channel.")
+
+					// delete initial message in any case.
+					s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+					return
+				}
+			}
+
+			s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+
 		case "moderate":
 
 			if len(args) < 2 {
