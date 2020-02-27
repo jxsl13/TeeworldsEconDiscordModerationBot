@@ -199,7 +199,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			return
 		}
 
-		matches := startVotekickRegex.FindStringSubmatch(line)
+		matches = startVotekickRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 7) {
 			kickingID, _ := strconv.Atoi(matches[1])
 			kickingName := matches[2]
