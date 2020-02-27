@@ -496,20 +496,24 @@ func main() {
 							// check for moderator mention
 							matches := moderatorMentions.FindStringSubmatch(line)
 							if len(matches) == (1 + 1) {
-								mention := matches[1]
 
-								roles, _ := s.GuildRoles(m.GuildID)
+								// there is a role configured
+								if len(config.DiscordModeratorRole) > 0 {
+									mention := matches[1]
 
-								mentionReplace := ""
-								for _, role := range roles {
-									if strings.Contains(role.Name, config.DiscordModeratorRole) {
-										mentionReplace = role.Mention()
-										break
+									roles, _ := s.GuildRoles(m.GuildID)
+
+									mentionReplace := ""
+									for _, role := range roles {
+										if strings.Contains(role.Name, config.DiscordModeratorRole) {
+											mentionReplace = role.Mention()
+											break
+										}
 									}
-								}
 
-								if len(mentionReplace) > 0 {
-									line = strings.ReplaceAll(line, mention, mentionReplace)
+									if len(mentionReplace) > 0 {
+										line = strings.ReplaceAll(line, mention, mentionReplace)
+									}
 								}
 							}
 
