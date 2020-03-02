@@ -30,6 +30,27 @@ func (a *channelAddressMap) Get(channelID discordChannel) (address, bool) {
 	return addr, ok
 }
 
+func (a *channelAddressMap) RemoveAddress(addr address) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	for key, value := range a.m {
+		if value == addr {
+			delete(a.m, key)
+			break
+		}
+	}
+	return
+}
+
+func (a *channelAddressMap) RemoveChannel(chann discordChannel) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	delete(a.m, chann)
+	return
+}
+
 func (a *channelAddressMap) AlreadyRegistered(addr address) (found bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

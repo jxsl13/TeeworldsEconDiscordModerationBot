@@ -428,6 +428,7 @@ func main() {
 
 			// start routine to listen to specified server.
 			go func(ctx context.Context, channelID, initialMessageID string, s *discordgo.Session, addr address, pass password) {
+				defer config.ChannelAddress.RemoveAddress(addr)
 				conn, err := econ.DialTo(string(addr), string(pass))
 				if err != nil {
 					s.ChannelMessageSend(m.ChannelID, err.Error())
