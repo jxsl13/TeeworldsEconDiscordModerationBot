@@ -14,9 +14,10 @@ It is possible to use one password with many econ connections or to specify one 
 This example configuration must live in the same folder as the executable and needs to be called `.env`
 
 Log level:
- -  0 : chat & votes & rcon,  
- -  1: 0 & join & leave
- -  2: 1 & whisper // TODO
+ -  0 : chat, teamchat, votes & rcon,  
+ -  1: 0 & whisper
+ -  2: 1 & join & leave
+
 ```
 DISCORD_TOKEN=1234567890
 DISCORD_ADMIN="nickname#1234"

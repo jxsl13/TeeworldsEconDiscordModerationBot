@@ -22,16 +22,28 @@ var (
 	config = configuration{}
 
 	playerJoinRegex    = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
-	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
+	playerJoinWithClan = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)' '(.*)'$`)
+
+	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'('.*')?$`)
 	startVotekickRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted kick '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startSpecVoteRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	executeRconCommand = regexp.MustCompile(`\[server\]: ClientID=([\d]{1,2}) rcon='(.*)'$`)
-	chatRegex          = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:([^:]{1,16}):(.*)$`)
+	chatRegex          = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	teamChatRegex      = regexp.MustCompile(`\[teamchat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	whisperRegex       = regexp.MustCompile(`\[whisper\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 
-	bansListRegex         = regexp.MustCompile(`\[net_ban\]: (.*)`)
+	banAddRegex     = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
+	banRemoveRegex  = regexp.MustCompile(`\[net_ban\]: unbanned '(.*)'`)
+	banExpiredRegex = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
+
+	bansNumRegexp      = regexp.MustCompile(`\[net_ban\]: ([\d]+) ban[s]?$`)
+	bannedListRegex    = regexp.MustCompile(`\[net_ban\]: '(.+)' banned for ([\d]+) minute[s]? \((.*)\)$`)
+	bansErrorRegex     = regexp.MustCompile(`\[net_ban\]: (.*error.*)$`)
+	bansListEntryRegex = regexp.MustCompile(`\[net_ban\]: #([\d]+) '(.+)' banned for ([\d]+) minute[s]? \((.*)\)`)
+
 	mutesAndVotebansRegex = regexp.MustCompile(`\[Server\]: (.*)`)
 
-	moderatorMentions = regexp.MustCompile(`\[chat\]: .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*`)
+	moderatorMentions = regexp.MustCompile(`\[chat\]: .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*`) // first plurals, then singular
 )
 
 func init() {
@@ -41,6 +53,7 @@ func init() {
 		ServerStates:             make(map[address]*server),
 		ChannelAddress:           newChannelAddressMap(),
 		DiscordModerators:        newUserSet(),
+		SpiedOnPlayers:           newUserSet(),
 		DiscordModeratorCommands: newCommandSet(),
 		DiscordCommandQueue:      make(map[address]chan command),
 	}
@@ -176,11 +189,27 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 
 			id, _ := strconv.Atoi(matches[1])
 			name := matches[3]
-			address := matches[2]
-			server.join(id, player{Name: name, ID: id, Address: address})
+			addr := address(matches[2])
+			server.join(id, player{Name: name, ID: id, Address: addr})
 
 			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
-			if config.LogLevel >= 1 {
+			if config.LogLevel >= 2 {
+				send = true
+			}
+			return
+		}
+
+		matches = playerJoinWithClan.FindStringSubmatch(line)
+		if len(matches) == (1 + 4) {
+
+			id, _ := strconv.Atoi(matches[1])
+			name := matches[3]
+			clan := matches[4]
+			addr := address(matches[2])
+			server.join(id, player{Name: name, Clan: clan, ID: id, Address: addr})
+
+			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
+			if config.LogLevel >= 2 {
 				send = true
 			}
 			return
@@ -193,7 +222,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			server.leave(id)
 
 			result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
-			if config.LogLevel >= 1 {
+			if config.LogLevel >= 2 {
 				send = true
 			}
 			return
@@ -228,6 +257,80 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			send = true
 			return
 		}
+		return
+	} else if strings.Contains(line, "[net_ban]") {
+
+		matches := banAddRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 3) {
+			ip := matches[1]
+
+			minutes, _ := strconv.Atoi(matches[2])
+			duration := time.Minute * time.Duration(minutes)
+			reason := matches[3]
+
+			result = fmt.Sprintf("**[bans]**: '%s' banned for %s with reason: '%s'", ip, duration, reason)
+			send = true
+			return
+		}
+
+		matches = bannedListRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 3) {
+			ip := matches[1]
+			minutes, _ := strconv.Atoi(matches[2])
+			duration := time.Minute * time.Duration(minutes)
+			reason := matches[3]
+
+			result = fmt.Sprintf("**[bans]**: '%s' banned for %s with reason: '%s'", ip, duration, reason)
+			send = true
+			return
+		}
+
+		matches = banExpiredRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			ip := matches[1]
+			result = fmt.Sprintf("[bans]: ban of '%s' expired", ip)
+			send = true
+			return
+		}
+
+		matches = bansNumRegexp.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			numberOfBans, _ := strconv.Atoi(matches[1])
+			result = fmt.Sprintf("[banlist]: %d ban(s)", numberOfBans)
+			send = true
+			return
+		}
+
+		matches = bansListEntryRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 4) {
+			index, _ := strconv.Atoi(matches[1])
+			ip := matches[2]
+
+			minutes, _ := strconv.Atoi(matches[3])
+			duration := time.Minute * time.Duration(minutes)
+			reason := matches[4]
+			result = fmt.Sprintf("[banlist]: index=%-2d ip='%s' duration=%s reason='%s'", index, ip, duration, reason)
+			send = true
+			return
+		}
+
+		matches = bansErrorRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			errorMsg := matches[1]
+			result = fmt.Sprintf("**[error]**: %s", errorMsg)
+			send = true
+			return
+		}
+
+		matches = banRemoveRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			ip := matches[1]
+			result = fmt.Sprintf("[bans]: unbanned %s", ip)
+			send = true
+			return
+		}
+
+		return
 	}
 
 	matches := chatRegex.FindStringSubmatch(line)
@@ -236,26 +339,42 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		name := matches[2]
 		text := matches[3]
 
-		result = fmt.Sprintf("[chat]: '%d:%s': %s", id, name, text)
+		result = fmt.Sprintf("[chat]: %d:'%s': %s", id, name, text)
 		send = true
+		return
+	}
+
+	matches = teamChatRegex.FindStringSubmatch(line)
+	if len(matches) == (1 + 3) {
+		id, _ := strconv.Atoi(matches[1])
+		name := matches[2]
+		text := matches[3]
+
+		result = fmt.Sprintf("[teamchat]: %d:'%s': %s", id, name, text)
+		send = true
+		return
+	}
+
+	matches = whisperRegex.FindStringSubmatch(line)
+	if len(matches) == (1 + 3) {
+		id, _ := strconv.Atoi(matches[1])
+		name := matches[2]
+		message := matches[3]
+
+		if config.LogLevel >= 1 || config.SpiedOnPlayers.Contains(name) {
+			result = fmt.Sprintf("[whisper] %d:'%s': %s", id, name, message)
+			send = true
+		}
 		return
 	}
 
 	matches = executeRconCommand.FindStringSubmatch(line)
 	if len(matches) == (1 + 2) {
 		adminID, _ := strconv.Atoi(matches[1])
-		name := server.PlayerName(adminID)
+		name := server.Player(adminID).Name
 		command := matches[2]
 
 		result = fmt.Sprintf("**[rcon]**: '%s' command='%s'", name, command)
-		send = true
-		return
-	}
-
-	matches = bansListRegex.FindStringSubmatch(line)
-	if len(matches) == (1 + 1) {
-		text := matches[1]
-		result = fmt.Sprintf("[net_ban]: %s", text)
 		send = true
 		return
 	}
@@ -428,7 +547,14 @@ func main() {
 
 			// start routine to listen to specified server.
 			go func(ctx context.Context, channelID, initialMessageID string, s *discordgo.Session, addr address, pass password) {
+				// channel - server association
 				defer config.ChannelAddress.RemoveAddress(addr)
+
+				// sub goroutines
+				routineContext, routineCancel := context.WithCancel(ctx)
+				defer routineCancel()
+
+				// econ connection
 				conn, err := econ.DialTo(string(addr), string(pass))
 				if err != nil {
 					s.ChannelMessageSend(m.ChannelID, err.Error())
@@ -436,7 +562,40 @@ func main() {
 				}
 				defer conn.Close()
 
-				// start channel cleanup
+				// cleanup all messages before the initial message
+				go func(channelID, initialMessageID string, s *discordgo.Session) {
+					for {
+						select {
+						case <-routineContext.Done():
+							return
+						default:
+							messages, err := s.ChannelMessages(channelID, 100, initialMessageID, "", "")
+							if err != nil {
+								log.Printf("error on purging previous channel messages: %s", err.Error())
+								continue
+							}
+							if len(messages) == 0 {
+								log.Println("finished cleaning up old messages.")
+								return
+							}
+							ids := make([]string, 0, 100)
+
+							for _, msg := range messages {
+								ids = append(ids, msg.ID)
+							}
+
+							err = s.ChannelMessagesBulkDelete(channelID, ids)
+							if err != nil {
+								log.Printf("error on bulk deleting previous messages: %s", err.Error())
+								return
+							}
+
+							log.Printf("deleted %d old messages.", len(messages))
+						}
+					}
+				}(channelID, initialMessageID, s)
+
+				// start channel history cleanup
 				go func(channelID, initialMessageID string, s *discordgo.Session) {
 
 					if err != nil {
@@ -448,7 +607,8 @@ func main() {
 						timer := time.NewTimer(2 * time.Minute)
 
 						select {
-						case <-ctx.Done():
+						case <-routineContext.Done():
+							log.Printf("closing main routine of: %s\n", addr)
 							return
 						case <-timer.C:
 							messages, err := s.ChannelMessages(channelID, 100, "", initialMessageID, "")
@@ -457,7 +617,6 @@ func main() {
 								continue
 							}
 
-							log.Printf("retrieved %d messages", len(messages))
 							cleanedUp := 0
 							for _, message := range messages {
 
@@ -478,7 +637,7 @@ func main() {
 									}
 								}
 							}
-							log.Printf("cleaned up %d messages", cleanedUp)
+							log.Printf("cleaned up %d of history messages", cleanedUp)
 						}
 					}
 				}(channelID, initialMessageID, s)
@@ -486,7 +645,8 @@ func main() {
 				go func(addr address, channelID string, s *discordgo.Session) {
 					for {
 						select {
-						case <-ctx.Done():
+						case <-routineContext.Done():
+							log.Printf("closing command queue routine of: %s\n", addr)
 							return
 						case cmd, ok := <-config.DiscordCommandQueue[addr]:
 							if !ok {
@@ -525,6 +685,7 @@ func main() {
 					// wait for read or abort
 					select {
 					case <-ctx.Done():
+						log.Printf("closing econ line parsing routine routine of: %s\n", addr)
 						return
 					case line := <-result:
 						// if read avalable, parse and if necessary, send
@@ -568,6 +729,20 @@ func main() {
 
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Started listening to server %s", addr))
 			return
+		case "spy":
+			nickname := strings.Trim(arguments, " \n")
+			config.SpiedOnPlayers.Add(nickname)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Spying on %q ", nickname))
+			return
+		case "unspy":
+			nickname := strings.Trim(arguments, " \n")
+			config.SpiedOnPlayers.Remove(nickname)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Stopped spying on %q", nickname))
+			return
+		case "purgespy":
+			config.SpiedOnPlayers.Reset()
+			s.ChannelMessageSend(m.ChannelID, "Purged all spied on players.")
+
 		}
 
 		s.ChannelMessageSend(m.ChannelID, "invalid command")

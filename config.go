@@ -20,6 +20,7 @@ type configuration struct {
 	DiscordToken             string
 	DiscordAdmin             string
 	DiscordModerators        userSet
+	SpiedOnPlayers           userSet
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
 	DiscordCommandQueue      map[address]chan command

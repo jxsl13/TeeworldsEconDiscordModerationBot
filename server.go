@@ -7,8 +7,9 @@ import (
 
 type player struct {
 	Name    string
+	Clan    string
 	ID      int
-	Address string
+	Address address
 }
 
 type playerSlot struct {
@@ -46,16 +47,16 @@ func (s *server) leave(id int) {
 	s.slots[id].Occupied = false
 }
 
-func (s *server) PlayerName(id int) string {
-	if id < 0 || id >= 64 {
+func (s *server) Player(id int) player {
+	if id < 0 || 64 <= id {
 		log.Println("Invalid leaving ID")
-		return ""
+		return player{}
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.slots[id].Player.Name
+	return s.slots[id].Player
 }
 
 func (s *server) Status() []player {
