@@ -24,7 +24,7 @@ var (
 	playerJoinRegex    = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
 	playerJoinWithClan = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)' '(.*)'$`)
 
-	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'('.*')?$`)
+	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
 	startVotekickRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted kick '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startSpecVoteRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	executeRconCommand = regexp.MustCompile(`\[server\]: ClientID=([\d]{1,2}) rcon='(.*)'$`)
@@ -37,7 +37,6 @@ var (
 	banExpiredRegex = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
 
 	bansNumRegexp      = regexp.MustCompile(`\[net_ban\]: ([\d]+) ban[s]?$`)
-	bannedListRegex    = regexp.MustCompile(`\[net_ban\]: '(.+)' banned for ([\d]+) minute[s]? \((.*)\)$`)
 	bansErrorRegex     = regexp.MustCompile(`\[net_ban\]: (.*error.*)$`)
 	bansListEntryRegex = regexp.MustCompile(`\[net_ban\]: #([\d]+) '(.+)' banned for ([\d]+) minute[s]? \((.*)\)`)
 
@@ -183,6 +182,7 @@ func parseCommandLine(cmd string) (line string, send bool, err error) {
 func parseEconLine(line string, server *server) (result string, send bool) {
 
 	if strings.Contains(line, "[server]") {
+		// contains all commands that contain [server] as prefix.
 
 		matches := playerJoinRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 3) {
@@ -218,6 +218,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		matches = playerLeaveRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 3) {
 			id, _ := strconv.Atoi(matches[1])
+			// ip := matches[2]
 			name := matches[3]
 			server.leave(id)
 
@@ -257,6 +258,18 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			send = true
 			return
 		}
+
+		matches = executeRconCommand.FindStringSubmatch(line)
+		if len(matches) == (1 + 2) {
+			adminID, _ := strconv.Atoi(matches[1])
+			name := server.Player(adminID).Name
+			command := matches[2]
+
+			result = fmt.Sprintf("**[rcon]**: '%s' command='%s'", name, command)
+			send = true
+			return
+		}
+
 		return
 	} else if strings.Contains(line, "[net_ban]") {
 
@@ -264,18 +277,6 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		if len(matches) == (1 + 3) {
 			ip := matches[1]
 
-			minutes, _ := strconv.Atoi(matches[2])
-			duration := time.Minute * time.Duration(minutes)
-			reason := matches[3]
-
-			result = fmt.Sprintf("**[bans]**: '%s' banned for %s with reason: '%s'", ip, duration, reason)
-			send = true
-			return
-		}
-
-		matches = bannedListRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
-			ip := matches[1]
 			minutes, _ := strconv.Atoi(matches[2])
 			duration := time.Minute * time.Duration(minutes)
 			reason := matches[3]
@@ -309,7 +310,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			minutes, _ := strconv.Atoi(matches[3])
 			duration := time.Minute * time.Duration(minutes)
 			reason := matches[4]
-			result = fmt.Sprintf("[banlist]: index=%-2d ip='%s' duration=%s reason='%s'", index, ip, duration, reason)
+			result = fmt.Sprintf("[banlist]: idx=%-2d '%s' %-9s (%s)", index, ip, duration, reason)
 			send = true
 			return
 		}
@@ -368,17 +369,6 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		return
 	}
 
-	matches = executeRconCommand.FindStringSubmatch(line)
-	if len(matches) == (1 + 2) {
-		adminID, _ := strconv.Atoi(matches[1])
-		name := server.Player(adminID).Name
-		command := matches[2]
-
-		result = fmt.Sprintf("**[rcon]**: '%s' command='%s'", name, command)
-		send = true
-		return
-	}
-
 	matches = mutesAndVotebansRegex.FindStringSubmatch(line)
 	if len(matches) == (1 + 1) {
 		text := matches[1]
@@ -388,7 +378,6 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 	}
 
 	return
-
 }
 
 func main() {
