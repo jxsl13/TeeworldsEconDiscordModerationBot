@@ -1,8 +1,14 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"sync"
+)
+
+var (
+	// ErrNotFound is returned by the ip matching player search function if no player was found.
+	ErrNotFound = errors.New("player not found")
 )
 
 type player struct {
@@ -18,11 +24,17 @@ type playerSlot struct {
 }
 
 type server struct {
-	mu    sync.RWMutex // guards server object
+	mu    sync.RWMutex // guards slots object
 	slots [64]playerSlot
+
+	BanServer banServer
 }
 
-func (s *server) join(id int, p player) {
+func newServer() *server {
+	return &server{BanServer: newBanServer()}
+}
+
+func (s *server) Join(id int, p player) {
 	if id < 0 || id >= 64 {
 		return
 	}
@@ -34,7 +46,7 @@ func (s *server) join(id int, p player) {
 	s.slots[id].Occupied = true
 }
 
-func (s *server) leave(id int) {
+func (s *server) Leave(id int) {
 	if id < 0 || id >= 64 {
 		log.Println("Invalid leaving ID")
 		return
@@ -57,6 +69,19 @@ func (s *server) Player(id int) player {
 	defer s.mu.Unlock()
 
 	return s.slots[id].Player
+}
+
+func (s *server) PlayerByIP(ip address) (player, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, slot := range s.slots {
+		if slot.Occupied && slot.Player.Address == ip {
+			return slot.Player, nil
+		}
+	}
+
+	return player{}, ErrNotFound
 }
 
 func (s *server) Status() []player {

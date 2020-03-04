@@ -35,9 +35,12 @@ var (
 	teamChatRegex = regexp.MustCompile(`\[teamchat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 	whisperRegex  = regexp.MustCompile(`\[whisper\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 
-	banAddRegex     = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
-	banRemoveRegex  = regexp.MustCompile(`\[net_ban\]: unbanned '(.*)'`)
-	banExpiredRegex = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
+	banAddRegex   = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
+	banAddIPRegex = regexp.MustCompile(`\[net_ban\]: '(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
+
+	banRemoveIndexRegex = regexp.MustCompile(`\[net_ban\]: unbanned index [\d]+ \('(.+)'\)`)
+	banRemoveIPRegex    = regexp.MustCompile(`\[net_ban\]: unbanned '(.+)'`)
+	banExpiredRegex     = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
 
 	bansNumRegexp      = regexp.MustCompile(`\[net_ban\]: ([\d]+) ban[s]?$`)
 	bansListEntryRegex = regexp.MustCompile(`\[net_ban\]: #([\d]+) '(.+)' banned for ([\d]+) minute[s]? \((.*)\)`)
@@ -129,7 +132,7 @@ func init() {
 	}
 
 	for _, addr := range servers {
-		config.ServerStates[address(addr)] = &server{}
+		config.ServerStates[address(addr)] = newServer()
 		config.DiscordCommandQueue[address(addr)] = make(chan command)
 	}
 
@@ -193,7 +196,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			id, _ := strconv.Atoi(matches[1])
 			name := matches[3]
 			addr := address(matches[2])
-			server.join(id, player{Name: name, ID: id, Address: addr})
+			server.Join(id, player{Name: name, ID: id, Address: addr})
 
 			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
 			if config.LogLevel >= 2 {
@@ -209,7 +212,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			name := matches[3]
 			clan := matches[4]
 			addr := address(matches[2])
-			server.join(id, player{Name: name, Clan: clan, ID: id, Address: addr})
+			server.Join(id, player{Name: name, Clan: clan, ID: id, Address: addr})
 
 			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
 			if config.LogLevel >= 2 {
@@ -223,7 +226,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			id, _ := strconv.Atoi(matches[1])
 			// ip := matches[2]
 			name := matches[3]
-			server.leave(id)
+			server.Leave(id)
 
 			result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
 			if config.LogLevel >= 2 {
@@ -313,22 +316,92 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 
 		matches := banAddRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 3) {
-			ip := matches[1]
-
+			ip := address(matches[1])
+			p, err := server.PlayerByIP(ip)
 			minutes, _ := strconv.Atoi(matches[2])
 			duration := time.Minute * time.Duration(minutes)
 			reason := matches[3]
 
-			result = fmt.Sprintf("**[bans]**: '%s' banned for %s with reason: '%s'", ip, duration, reason)
+			if err == nil {
+				server.BanServer.Ban(p, duration, reason)
+			} else {
+				dummyPlayer := player{
+					Name:    "(unknown)",
+					Clan:    "(unknown)",
+					Address: ip,
+					ID:      -1,
+				}
+				server.BanServer.Ban(dummyPlayer, duration, reason)
+			}
+
+			result = fmt.Sprintf("**[bans]**: '%s' banned for %9s with reason: '%s'", ip, duration.Round(time.Second), reason)
+			send = true
+			return
+		}
+
+		matches = banAddIPRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 3) {
+			ip := address(matches[1])
+			p, err := server.PlayerByIP(ip)
+			minutes, _ := strconv.Atoi(matches[2])
+			duration := time.Minute * time.Duration(minutes)
+			reason := matches[3]
+
+			if err == nil {
+				server.BanServer.Ban(p, duration, reason)
+			} else {
+				dummyPlayer := player{
+					Name:    "(unknown)",
+					Clan:    "(unknown)",
+					Address: ip,
+					ID:      -1,
+				}
+				server.BanServer.Ban(dummyPlayer, duration, reason)
+			}
+
+			result = fmt.Sprintf("**[bans]**: '%s' banned for %s with reason: '%s'", ip, duration.Round(time.Second), reason)
 			send = true
 			return
 		}
 
 		matches = banExpiredRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 1) {
-			ip := matches[1]
-			result = fmt.Sprintf("[bans]: ban of '%s' expired", ip)
+			ip := address(matches[1])
+
+			ban, err := server.BanServer.UnbanIP(ip)
 			send = true
+			if err != nil {
+				result = fmt.Sprintf("[bans]: ban of '%s' expired", ip)
+			} else {
+				result = fmt.Sprintf("[bans]: ban of '%s' expired (%s)", ban.Player.Name, ban.Reason)
+			}
+			return
+		}
+
+		matches = banRemoveIndexRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			ip := address(matches[1])
+			ban, err := server.BanServer.UnbanIP(ip)
+			send = true
+			if err != nil {
+				result = fmt.Sprintf("[bans]: unbanned '%s'", ip)
+			} else {
+				result = fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
+			}
+			return
+		}
+
+		matches = banRemoveIPRegex.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			ip := address(matches[1])
+			ban, err := server.BanServer.UnbanIP(ip)
+			send = true
+
+			if err != nil {
+				result = fmt.Sprintf("[bans]: unbanned '%s'", ip)
+			} else {
+				result = fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
+			}
 			return
 		}
 
@@ -348,7 +421,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			minutes, _ := strconv.Atoi(matches[3])
 			duration := time.Minute * time.Duration(minutes)
 			reason := matches[4]
-			result = fmt.Sprintf("[banlist]: idx=%-2d '%s' %9s (%s)", index, ip, duration, reason)
+			result = fmt.Sprintf("[banlist]: idx=%-2d '%s' %9s (%s)", index, ip, duration.Round(time.Second), reason)
 			send = true
 			return
 		}
@@ -357,14 +430,6 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		if len(matches) == (1 + 1) {
 			errorMsg := matches[1]
 			result = fmt.Sprintf("**[error]**: %s", errorMsg)
-			send = true
-			return
-		}
-
-		matches = banRemoveRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 1) {
-			ip := matches[1]
-			result = fmt.Sprintf("[bans]: unbanned %s", ip)
 			send = true
 			return
 		}
@@ -444,40 +509,45 @@ func main() {
 				return
 			}
 			cmd := m.Content[1:]
+			if !config.DiscordModeratorCommands.Contains(cmd) {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Access to the command %q denied.", cmd))
+				return
+			}
 
-			// handle status from cache data
-			if cmd == "status" {
-				if config.DiscordModeratorCommands.Contains(cmd) {
-					players := config.ServerStates[addr].Status()
+			switch cmd {
+			case "status":
 
-					if len(players) == 0 {
-						s.ChannelMessageSend(m.ChannelID, "There are currently no players online.")
-						return
-					}
+				// handle status from cache data
+				players := config.ServerStates[addr].Status()
 
-					sb := strings.Builder{}
-					sb.WriteString("```")
-					for _, p := range players {
-						sb.WriteString(fmt.Sprintf("id=%-2d %s\n", p.ID, p.Name))
-					}
-					sb.WriteString("```")
-
-					_, err := s.ChannelMessageSend(m.ChannelID, sb.String())
-					if err != nil {
-						log.Printf("error while sending status message: %s", err.Error())
-					}
-
+				if len(players) == 0 {
+					s.ChannelMessageSend(m.ChannelID, "There are currently no players online.")
 					return
 				}
 
-				_, err := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Access to the command %q denied.", cmd))
-				if err != nil {
-					log.Printf("error while sending status message: %s", err.Error())
+				sb := strings.Builder{}
+				sb.WriteString("```")
+				for _, p := range players {
+					sb.WriteString(fmt.Sprintf("id=%-2d %s\n", p.ID, p.Name))
 				}
+				sb.WriteString("```")
+
+				s.ChannelMessageSend(m.ChannelID, sb.String())
+
+			case "bans":
+				numBans := config.ServerStates[addr].BanServer.Size()
+				if numBans == 0 {
+					s.ChannelMessageSend(m.ChannelID, "[banlist]: 0 ban(s)")
+					return
+				}
+				msg := fmt.Sprintf("[banlist]: %d ban(s)\n```%s```\n", numBans, config.ServerStates[addr].BanServer.String())
+				s.ChannelMessageSend(m.ChannelID, msg)
+			default:
+				// send other messages this way
+				config.DiscordCommandQueue[addr] <- command{Author: m.Author.String(), Command: cmd}
+
 			}
 
-			// send other messages this way
-			config.DiscordCommandQueue[addr] <- command{Author: m.Author.String(), Command: cmd}
 			return
 
 		}
