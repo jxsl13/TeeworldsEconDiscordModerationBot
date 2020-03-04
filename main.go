@@ -310,7 +310,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			minutes, _ := strconv.Atoi(matches[3])
 			duration := time.Minute * time.Duration(minutes)
 			reason := matches[4]
-			result = fmt.Sprintf("[banlist]: idx=%-2d '%s' %-9s (%s)", index, ip, duration, reason)
+			result = fmt.Sprintf("[banlist]: idx=%-2d '%s' %9s (%s)", index, ip, duration, reason)
 			send = true
 			return
 		}
