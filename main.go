@@ -626,7 +626,9 @@ func main() {
 									}
 								}
 							}
-							log.Printf("cleaned up %d of history messages", cleanedUp)
+							if cleanedUp > 0 {
+								log.Printf("cleaned up %d of history messages", cleanedUp)
+							}
 						}
 					}
 				}(channelID, initialMessageID, s)
