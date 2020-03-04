@@ -27,18 +27,21 @@ var (
 	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
 	startVotekickRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted kick '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startSpecVoteRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
+	startOptionVote    = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted option '(.+)' reason='(.{1,20})' cmd='(.+)' force=([\d])`)
+
 	executeRconCommand = regexp.MustCompile(`\[server\]: ClientID=([\d]{1,2}) rcon='(.*)'$`)
-	chatRegex          = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
-	teamChatRegex      = regexp.MustCompile(`\[teamchat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
-	whisperRegex       = regexp.MustCompile(`\[whisper\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
+
+	chatRegex     = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	teamChatRegex = regexp.MustCompile(`\[teamchat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	whisperRegex  = regexp.MustCompile(`\[whisper\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 
 	banAddRegex     = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
 	banRemoveRegex  = regexp.MustCompile(`\[net_ban\]: unbanned '(.*)'`)
 	banExpiredRegex = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
 
 	bansNumRegexp      = regexp.MustCompile(`\[net_ban\]: ([\d]+) ban[s]?$`)
-	bansErrorRegex     = regexp.MustCompile(`\[net_ban\]: (.*error.*)$`)
 	bansListEntryRegex = regexp.MustCompile(`\[net_ban\]: #([\d]+) '(.+)' banned for ([\d]+) minute[s]? \((.*)\)`)
+	bansErrorRegex     = regexp.MustCompile(`\[net_ban\]: (.*error.*)$`)
 
 	mutesAndVotebansRegex = regexp.MustCompile(`\[Server\]: (.*)`)
 
@@ -229,6 +232,27 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			return
 		}
 
+		matches = startOptionVote.FindStringSubmatch(line)
+		if len(matches) == (1 + 7) {
+			votingID, _ := strconv.Atoi(matches[1])
+			votingName := matches[2]
+
+			optionName := matches[3]
+			reason := matches[4]
+
+			forced := matches[6]
+
+			if forced == "1" {
+				forced = "/forced"
+			} else {
+				forced = ""
+			}
+
+			result = fmt.Sprintf("**[optionvote%s]**: %d:'%s' voted option '%s' with reason '%s'", forced, votingID, votingName, optionName, reason)
+			send = true
+			return
+		}
+
 		matches = startVotekickRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 7) {
 			kickingID, _ := strconv.Atoi(matches[1])
@@ -238,8 +262,15 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			kickedName := matches[4]
 
 			reason := matches[5]
+			forced := matches[7]
 
-			result = fmt.Sprintf("**[kickvote]**: '%d:%s' started to kick '%d:%s' with reason '%s'", kickingID, kickingName, kickedID, kickedName, reason)
+			if forced == "1" {
+				forced = "/forced"
+			} else {
+				forced = ""
+			}
+
+			result = fmt.Sprintf("**[kickvote%s]**: %d:'%s' started to kick %d:'%s' with reason '%s'", forced, kickingID, kickingName, kickedID, kickedName, reason)
 			send = true
 			return
 		}
@@ -253,8 +284,15 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			votedName := matches[4]
 
 			reason := matches[5]
+			forced := matches[7]
 
-			result = fmt.Sprintf("**[specvote]**: '%d:%s' wants to move '%d:%s' to spectators with reason '%s'", votingID, votingName, votedID, votedName, reason)
+			if forced == "1" {
+				forced = "/forced"
+			} else {
+				forced = ""
+			}
+
+			result = fmt.Sprintf("**[specvote%s]**: %d:'%s' wants to move %d:'%s' to spectators with reason '%s'", forced, votingID, votingName, votedID, votedName, reason)
 			send = true
 			return
 		}
