@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -107,6 +106,7 @@ func init() {
 			config.DiscordModeratorCommands.Add(cmd)
 		}
 	}
+	config.DiscordModeratorCommands.Add("help")
 
 	moderatorRole, ok := env["DISCORD_MODERATOR_ROLE"]
 	if ok && len(moderatorRole) > 0 {
@@ -151,35 +151,9 @@ func init() {
 
 func parseCommandLine(cmd string) (line string, send bool, err error) {
 	args := strings.Split(cmd, " ")
-	if len(args) > 0 {
-		// help is not part of the commands
-		if args[0] == "help" {
-			sb := strings.Builder{}
-			sb.WriteString("Available Commands: \n")
-			sb.WriteString("```")
-			for _, cmd := range config.DiscordModeratorCommands.Commands() {
-				sb.WriteString(fmt.Sprintf("?%s\n", cmd))
-			}
-			sb.WriteString("```")
-
-			sb.WriteString("Moderators:\n")
-			sb.WriteString("```")
-			for _, moderator := range config.DiscordModerators.Users() {
-				sb.WriteString(fmt.Sprintf("%s\n", moderator))
-			}
-			sb.WriteString("```")
-
-			err = errors.New(sb.String())
-			return
-		}
-
-		// all allowed commands
-		if !config.DiscordModeratorCommands.Contains(args[0]) {
-			err = fmt.Errorf("access to command %q denied", args[0])
-			return
-		}
+	if len(args) < 1 {
+		return
 	}
-
 	line = cmd
 	send = true
 	return
@@ -509,12 +483,37 @@ func main() {
 				return
 			}
 			cmd := m.Content[1:]
-			if !config.DiscordModeratorCommands.Contains(cmd) {
+
+			if len(cmd) == 0 {
+				return
+			}
+
+			cmdTokens := strings.Split(cmd, " ")
+			if len(cmdTokens) > 0 && !config.DiscordModeratorCommands.Contains(cmdTokens[0]) {
 				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Access to the command %q denied.", cmd))
 				return
 			}
 
 			switch cmd {
+			case "help":
+				// help is not part of the commands
+				sb := strings.Builder{}
+				sb.WriteString("Available Commands: \n")
+				sb.WriteString("```")
+				for _, cmd := range config.DiscordModeratorCommands.Commands() {
+					sb.WriteString(fmt.Sprintf("?%s\n", cmd))
+				}
+				sb.WriteString("```")
+
+				sb.WriteString("Moderators:\n")
+				sb.WriteString("```")
+				for _, moderator := range config.DiscordModerators.Users() {
+					sb.WriteString(fmt.Sprintf("%s\n", moderator))
+				}
+				sb.WriteString("```")
+
+				s.ChannelMessageSend(m.ChannelID, sb.String())
+				return
 			case "status":
 
 				// handle status from cache data
