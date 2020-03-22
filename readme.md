@@ -11,6 +11,7 @@ This way was chosen in order not to expose the econ password to the moderation s
 ## Requirements
 
 - Needs the Go compiler in order to be compiled. That's all.
+- Your Teeworlds server needs to have `ec_output_level` set to at least `2` in order to see join/leave messages.
 
 ## Build
 
@@ -37,13 +38,15 @@ DISCORD_TOKEN=tyzxdcfkvbxckvbnmKCgkcGKCruasLVL
 
 # the administrator is the only person allowed to actually  execute admin commands, 
 # especially adding/removing moderators, connecting the bot to a specific discord channel, etc.
+# This nickname needs to be within quotes, otherwise the #1234 won't be parsed properly.
 DISCORD_ADMIN="nickname#1234"
 
 # it is possible give specific users moderation access.
 # this can be used instead of having to manually add moerators to the list
 # can be used to keep the moderator list the same after bot restarts
 # moderators can be removed by the admin at runtime anyway.
-DISCORD_MODERATORS="nickname#12345 nickname2#3456"
+# These nicks also need to be in quotes.
+DISCORD_MODERATORS="nickname2#2345 nickname3#3456"
 
 # this is the group that is pinged, when someone writes @mods, @mod, @admins, etc.
 DISCORD_MODERATOR_ROLE="Server Moderator"
@@ -139,8 +142,9 @@ Important to know, imo.
 
 ### Logging of Discord Command Execution
 
-In order for the server owner to ensure a proper logging of staff activity, on the server as well as for the commands that were executed in the respective Discord channels, each executed Discord command is being written with the server logs, by executing the Teeworlds' own `echo` command.
+In order for the server owner to ensure a proper logging of staff activity, on the server as well as for the commands that were executed in the respective Discord channels, each executed Discord command is being written to the server logs, by executing Teeworlds' own `echo` command.
 The resulting server log entry might look like this:
+The `#` in Discord user names needs to be explicitly replaced, as Teeworlds does not like them, cutting off the rest of the executed command.
 
 ```text
 [2020-02-27 01:08:20][Console]: User 'discorduser_1234' executed rcon 'say test'
