@@ -30,9 +30,7 @@ var (
 	teamChatRegex = regexp.MustCompile(`\[teamchat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 	whisperRegex  = regexp.MustCompile(`\[whisper\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 
-	bansNumRegexp      = regexp.MustCompile(`\[net_ban\]: ([\d]+) ban[s]?$`)
-	bansListEntryRegex = regexp.MustCompile(`\[net_ban\]: #([\d]+) '(.+)' banned for ([\d]+) minute[s]? \((.*)\)`)
-	bansErrorRegex     = regexp.MustCompile(`\[net_ban\]: (.*error.*)$`)
+	bansErrorRegex = regexp.MustCompile(`\[net_ban\]: (.*error.*)$`)
 
 	mutesAndVotebansRegex = regexp.MustCompile(`\[Server\]: (.*)`)
 
@@ -251,28 +249,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			return
 		}
 
-		matches := bansNumRegexp.FindStringSubmatch(line)
-		if len(matches) == (1 + 1) {
-			numberOfBans, _ := strconv.Atoi(matches[1])
-			result = fmt.Sprintf("[banlist]: %d ban(s)", numberOfBans)
-			send = true
-			return
-		}
-
-		matches = bansListEntryRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 4) {
-			index, _ := strconv.Atoi(matches[1])
-			ip := matches[2]
-
-			minutes, _ := strconv.Atoi(matches[3])
-			duration := time.Minute * time.Duration(minutes)
-			reason := matches[4]
-			result = fmt.Sprintf("[banlist]: idx=%-2d '%s' %9s (%s)", index, ip, duration.Round(time.Second), reason)
-			send = true
-			return
-		}
-
-		matches = bansErrorRegex.FindStringSubmatch(line)
+		matches := bansErrorRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 1) {
 			errorMsg := matches[1]
 			result = fmt.Sprintf("**[error]**: %s", errorMsg)
