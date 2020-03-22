@@ -10,7 +10,7 @@ This way was chosen in order not to expose the econ password to the moderation s
 
 ## Requirements
 
--Needs the Go compiler in order to be compiled. That's all.
+- Needs the Go compiler in order to be compiled. That's all.
 
 ## Build
 
@@ -150,14 +150,13 @@ This is done by defining a `logfile Server-5-` in the Teeworlds server configura
 The moderation bot ensures that the Discord message log is not older than 24 hours.
 This is takes some load off of Discord and ensures some privacy for the users that play on the servers, as the moderation staff does and should not have an extended access to such information.
 
-
 ## Usage
 
- -Start the bot
- -Add your bot to a server/channel
- -execute `#moderate 127.0.0.1:9303` in any channel that the bot has access to. That channel becommes the bot's log channel. Repeated executions of that command will not work, thus forcing you to restart the bot if a new channel should be used as the log channel.
- -the bot tries to hide as much personal info, especially IPs, only in edge cases users see actual IPs.
- -after the bot started, you can use commands like `?help`, `?status`, `?bans` and many more. The first three commands do not execute anything on the Teeworlds server, but this data is being evalued and memorized by the bot to ensure a smaller log size and less stress on the Teeworlds server.
+- Start the bot
+- Add your bot to a server/channel
+- execute `#moderate 127.0.0.1:9303` in any channel that the bot has access to. That channel becommes the bot's log channel. Repeated executions of that command will not work, thus forcing you to restart the bot if a new channel should be used as the log channel.
+- the bot tries to hide as much personal info, especially IPs, only in edge cases users see actual IPs.
+- after the bot started, you can use commands like `?help`, `?status`, `?bans` and many more. The first three commands do not execute anything on the Teeworlds server, but this data is being evalued and memorized by the bot to ensure a smaller log size and less stress on the Teeworlds server.
 
 
   
