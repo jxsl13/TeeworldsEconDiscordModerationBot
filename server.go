@@ -11,11 +11,15 @@ import (
 )
 
 /*
+// vanilla
 [2019-10-13 03:15:53][server]: player is ready. ClientID=0 addr=127.0.0.1:61292
 [2019-10-13 03:15:53][server]: 'qwertzuio    ' -> 'qwertzuio'
 [2019-10-13 03:15:53][server]: player has entered the game. ClientID=0 addr=127.0.0.1:61292
 
 [2019-10-13 03:16:06][server]: client dropped. cid=0 addr=127.0.0.1:61292 reason=''
+
+// ddrace
+[2020-03-19 12:43:14][server]: player is ready. ClientID=0 addr=<{123.0.0.1:51151}>
 */
 
 var (
@@ -23,16 +27,16 @@ var (
 	ErrPlayerNotFound = errors.New("player not found")
 
 	// 0: full 1: ID 2: IP
-	playerReadyRegex = regexp.MustCompile(`\[server\]: player is ready. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+$`)
+	playerReadyRegex = regexp.MustCompile(`\[server\]: player is ready. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]*$`)
 
 	// 0 full 1: trimmed nickname
 	playerGetNameRegex = regexp.MustCompile(`\[server\]: '.{0,20}' -> '(.{0,20})'$`)
 
 	// 0: full 1: ID 2: IP
-	playerEnteredRegex = regexp.MustCompile(`\[server\]: player has entered the game. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+$`)
+	playerEnteredRegex = regexp.MustCompile(`\[server\]: player has entered the game. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]*$`)
 
 	// 0: full 1: ID 2: IP 3: reason
-	playerLeftRegex = regexp.MustCompile(`\[server\]: client dropped. cid=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+ reason='(.*)'$`)
+	playerLeftRegex = regexp.MustCompile(`\[server\]: client dropped. cid=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]* reason='(.*)'$`)
 
 	banAddRegex   = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
 	banAddIPRegex = regexp.MustCompile(`\[net_ban\]: '(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
