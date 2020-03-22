@@ -20,10 +20,6 @@ import (
 var (
 	config = configuration{}
 
-	playerJoinRegex    = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
-	playerJoinWithClan = regexp.MustCompile(`\[server\]: server_join ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)' '(.*)'$`)
-
-	playerLeaveRegex   = regexp.MustCompile(`\[server\]: server_leave ClientID=([\d]{1,2}) addr=([^ ]+) '(.*)'$`)
 	startVotekickRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted kick '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startSpecVoteRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startOptionVote    = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted option '(.+)' reason='(.{1,20})' cmd='(.+)' force=([\d])`)
@@ -33,13 +29,6 @@ var (
 	chatRegex     = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 	teamChatRegex = regexp.MustCompile(`\[teamchat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
 	whisperRegex  = regexp.MustCompile(`\[whisper\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
-
-	banAddRegex   = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
-	banAddIPRegex = regexp.MustCompile(`\[net_ban\]: '(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
-
-	banRemoveIndexRegex = regexp.MustCompile(`\[net_ban\]: unbanned index [\d]+ \('(.+)'\)`)
-	banRemoveIPRegex    = regexp.MustCompile(`\[net_ban\]: unbanned '(.+)'`)
-	banExpiredRegex     = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
 
 	bansNumRegexp      = regexp.MustCompile(`\[net_ban\]: ([\d]+) ban[s]?$`)
 	bansListEntryRegex = regexp.MustCompile(`\[net_ban\]: #([\d]+) '(.+)' banned for ([\d]+) minute[s]? \((.*)\)`)
@@ -81,10 +70,10 @@ func init() {
 	config.DiscordAdmin = discordAdmin
 	config.DiscordModerators.Add(discordAdmin)
 
-	econServers, ok := env["ECON_SERVERS"]
+	econServers, ok := env["ECON_ADDRESSES"]
 
 	if !ok || len(econServers) == 0 {
-		log.Fatal("error: no ECON_SERVERS specified")
+		log.Fatal("error: no ECON_ADDRESSES specified")
 	}
 
 	econPasswords, ok := env["ECON_PASSWORDS"]
@@ -122,9 +111,9 @@ func init() {
 			passwords = append(passwords, passwords[0])
 		}
 	} else if len(passwords) != len(servers) {
-		log.Fatal("ECON_SERVERS and ECON_PASSWORDS mismatch")
+		log.Fatal("ECON_ADDRESSES and ECON_PASSWORDS mismatch")
 	} else if len(servers) == 0 {
-		log.Fatal("No ECON_SERVERS and/or ECON_PASSWORDS specified.")
+		log.Fatal("No ECON_ADDRESSES and/or ECON_PASSWORDS specified.")
 	}
 
 	for idx, addr := range servers {
@@ -164,51 +153,17 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 	if strings.Contains(line, "[server]") {
 		// contains all commands that contain [server] as prefix.
 
-		matches := playerJoinRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
-
-			id, _ := strconv.Atoi(matches[1])
-			name := matches[3]
-			addr := address(matches[2])
-			server.Join(id, player{Name: name, ID: id, Address: addr})
-
-			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
-			if config.LogLevel >= 2 {
+		// the server consumed the line, so no further
+		// parsing is needed
+		if consumed, fmtLine := server.ParseLine(line); consumed {
+			result = fmtLine
+			if fmtLine != "" {
 				send = true
 			}
 			return
 		}
 
-		matches = playerJoinWithClan.FindStringSubmatch(line)
-		if len(matches) == (1 + 4) {
-
-			id, _ := strconv.Atoi(matches[1])
-			name := matches[3]
-			clan := matches[4]
-			addr := address(matches[2])
-			server.Join(id, player{Name: name, Clan: clan, ID: id, Address: addr})
-
-			result = fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
-			if config.LogLevel >= 2 {
-				send = true
-			}
-			return
-		}
-
-		matches = playerLeaveRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
-			id, _ := strconv.Atoi(matches[1])
-			// ip := matches[2]
-			name := matches[3]
-			server.Leave(id)
-
-			result = fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
-			if config.LogLevel >= 2 {
-				send = true
-			}
-			return
-		}
-
+		matches := []string{}
 		matches = startOptionVote.FindStringSubmatch(line)
 		if len(matches) == (1 + 7) {
 			votingID, _ := strconv.Atoi(matches[1])
@@ -288,98 +243,15 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		return
 	} else if strings.Contains(line, "[net_ban]") {
 
-		matches := banAddRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
-			ip := address(matches[1])
-			p, err := server.PlayerByIP(ip)
-			minutes, _ := strconv.Atoi(matches[2])
-			duration := time.Minute * time.Duration(minutes)
-			reason := matches[3]
-
-			if err == nil {
-				server.BanServer.Ban(p, duration, reason)
-			} else {
-				dummyPlayer := player{
-					Name:    "(unknown)",
-					Clan:    "(unknown)",
-					Address: ip,
-					ID:      -1,
-				}
-				server.BanServer.Ban(dummyPlayer, duration, reason)
-			}
-
-			result = fmt.Sprintf("**[bans]**: '%s' banned for %9s with reason: '%s'", ip, duration.Round(time.Second), reason)
-			send = true
-			return
-		}
-
-		matches = banAddIPRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 3) {
-			ip := address(matches[1])
-			p, err := server.PlayerByIP(ip)
-			minutes, _ := strconv.Atoi(matches[2])
-			duration := time.Minute * time.Duration(minutes)
-			reason := matches[3]
-
-			if err == nil {
-				server.BanServer.Ban(p, duration, reason)
-			} else {
-				dummyPlayer := player{
-					Name:    "(unknown)",
-					Clan:    "(unknown)",
-					Address: ip,
-					ID:      -1,
-				}
-				server.BanServer.Ban(dummyPlayer, duration, reason)
-			}
-
-			result = fmt.Sprintf("**[bans]**: '%s' banned for %s with reason: '%s'", ip, duration.Round(time.Second), reason)
-			send = true
-			return
-		}
-
-		matches = banExpiredRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 1) {
-			ip := address(matches[1])
-
-			ban, err := server.BanServer.UnbanIP(ip)
-			send = true
-			if err != nil {
-				result = fmt.Sprintf("[bans]: ban of '%s' expired", ip)
-			} else {
-				result = fmt.Sprintf("[bans]: ban of '%s' expired (%s)", ban.Player.Name, ban.Reason)
+		if consumed, fmtLine := server.ParseLine(line); consumed {
+			result = fmtLine
+			if fmtLine != "" {
+				send = true
 			}
 			return
 		}
 
-		matches = banRemoveIndexRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 1) {
-			ip := address(matches[1])
-			ban, err := server.BanServer.UnbanIP(ip)
-			send = true
-			if err != nil {
-				result = fmt.Sprintf("[bans]: unbanned '%s'", ip)
-			} else {
-				result = fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
-			}
-			return
-		}
-
-		matches = banRemoveIPRegex.FindStringSubmatch(line)
-		if len(matches) == (1 + 1) {
-			ip := address(matches[1])
-			ban, err := server.BanServer.UnbanIP(ip)
-			send = true
-
-			if err != nil {
-				result = fmt.Sprintf("[bans]: unbanned '%s'", ip)
-			} else {
-				result = fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
-			}
-			return
-		}
-
-		matches = bansNumRegexp.FindStringSubmatch(line)
+		matches := bansNumRegexp.FindStringSubmatch(line)
 		if len(matches) == (1 + 1) {
 			numberOfBans, _ := strconv.Atoi(matches[1])
 			result = fmt.Sprintf("[banlist]: %d ban(s)", numberOfBans)
@@ -783,7 +655,7 @@ func main() {
 					// wait for read or abort
 					select {
 					case <-ctx.Done():
-						log.Printf("closing econ line parsing routine routine of: %s\n", addr)
+						log.Printf("closing econ line parsing routine of: %s\n", addr)
 						return
 					case line := <-result:
 						// if read avalable, parse and if necessary, send
