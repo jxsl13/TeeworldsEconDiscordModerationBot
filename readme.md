@@ -142,6 +142,10 @@ Important to know, imo.
 In order for the server owner to ensure a proper logging of staff activity, on the server as well as for the commands that were executed in the respective Discord channels, each executed Discord command is being written with the server logs, by executing the Teeworlds' own `echo` command.
 The resulting server log entry might look like this:
 
+```text
+[2020-02-27 01:08:20][Console]: User 'discorduser_1234' executed rcon 'say test'
+```
+
 The server must have logs enabled for this to actually work.
 This is done by defining a `logfile Server-5-` in the Teeworlds server configuration file.
 
