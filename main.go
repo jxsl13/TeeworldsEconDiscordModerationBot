@@ -37,6 +37,9 @@ var (
 	moderatorMentions = regexp.MustCompile(`\[chat\]: .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*`) // first plurals, then singular
 
 	formatedSpecVoteKickStringRegex = regexp.MustCompile(`\*\*\[.*vote.*\]\*\*\: ([\d]+):'(.{0,20})' [^\d]{12,15} ([\d]+):'(.{0,20})'( to spectators)? with reason '(.+)'$`)
+
+	forcedYesRegex = regexp.MustCompile(`\[server\]: forcing vote yes$`)
+	forcedNoRegex  = regexp.MustCompile(`\[server\]: forcing vote no$`)
 )
 
 func init() {
@@ -264,6 +267,20 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			}
 
 			result = fmt.Sprintf("**[specvote%s]**: %d:'%s' wants to move %d:'%s' to spectators with reason '%s'", forced, votingID, votingName, votedID, votedName, reason)
+			send = true
+			return
+		}
+
+		matches = forcedYesRegex.FindStringSubmatch(line)
+		if len(matches) == 1 {
+			result = "**[server]**: Forced Yes"
+			send = true
+			return
+		}
+
+		matches = forcedNoRegex.FindStringSubmatch(line)
+		if len(matches) == 1 {
+			result = "**[server]**: Forced No"
 			send = true
 			return
 		}
@@ -743,6 +760,7 @@ func main() {
 										default:
 
 											if time.Now().After(end) {
+												s.ChannelMessageSend(channelID, "**[server]**: vote timed out.")
 												return
 											}
 											time.Sleep(time.Second)

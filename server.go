@@ -36,7 +36,8 @@ var (
 	playerEnteredRegex = regexp.MustCompile(`\[server\]: player has entered the game. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]*$`)
 
 	// 0: full 1: ID 2: IP 3: reason
-	playerLeftRegex = regexp.MustCompile(`\[server\]: client dropped. cid=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]* reason='(.*)'$`)
+	playerLeftRegex               = regexp.MustCompile(`\[server\]: client dropped. cid=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]* reason='(.*)'$`)
+	playerLeftDueToBanReasonRegex = regexp.MustCompile(`You have been banned for ([\d]+) minutes \(Banned by vote\)`)
 
 	banAddRegex   = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
 	banAddIPRegex = regexp.MustCompile(`\[net_ban\]: '(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
@@ -134,7 +135,15 @@ func (s *server) ParseLine(line string) (consumed bool, logline string) {
 		match = playerLeftRegex.FindStringSubmatch(line)
 		if len(match) == 4 {
 			id, _ := strconv.Atoi(match[1])
+			reason := match[3]
+
 			s.players[id].State = stateEmpty
+
+			match = playerLeftDueToBanReasonRegex.FindStringSubmatch(reason)
+			if len(match) == 2 {
+				// send reason, if player was banned.
+				return true, fmt.Sprintf("[server]: '%s' was banned for %s minutes by vote.", s.players[id].Name, match[1])
+			}
 
 			if config.LogLevel >= 2 {
 				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", s.players[id].Name, id)
