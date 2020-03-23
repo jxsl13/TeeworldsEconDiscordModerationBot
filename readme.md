@@ -84,7 +84,7 @@ BANID_REPLACEMENT_COMMAND="voteban {ID} 1800"
 # if the player leaves after voting, one might think that it's an intended funvote, thus increasing
 # this second method that is used, if the player left the server.
 # default: "ban {IP} 10 violation of rules"
-BANIP_REPLACEMENT_COMMAND="voteban {IP} 3600"
+BANIP_REPLACEMENT_COMMAND="ban {IP} 3600 violation of rules"
 
 # this is the list of possible servers that can be moderated.
 # if the moderation bot is run on the same server as the Teeworlds servers,
