@@ -5,6 +5,14 @@ The basic workflow is, that the *administrator* of the bot creates a dedicated c
 After the channel has been created, the administrator adds the bot to the channel and starts monitoring a specic server by connecting the channel to a specific server.
 This connection is established by the command `#moderate econIP:econPort` and cannot be terminated without restarting the bot itself, meaning this is a one time connection process.
 
+The bot treats ingame votes diffently, than for example chat, commands executed in the rcon, etc.
+It is posisble to interact with votes from Discord.
+The bot has three options to interact with spectator votes and kick votes.
+The first one is to force the vote to pass, basically executing `vote yes`.
+The second option is to force the vote to fail, executing `vote no`
+The third option is to punish the voter. This option forces the vote to fail and bans the voting player.
+The default behavior can be exchanged with other commands like `voteban {ID} 1800` etc.
+
 Each `econIP:econPort` that is used by the admin in the `#moderate` command must be present in the configuration file `.env`
 This way was chosen in order not to expose the econ password to the moderation staff, as they might gain too many access rights if they connected to the external console themselves.
 
@@ -53,6 +61,22 @@ DISCORD_MODERATOR_ROLE="Server Moderator"
 
 # this is a list of commands that can be used by moderators from the discord logging channels.
 DISCORD_MODERATOR_COMMANDS="status vote say mute unmute mutes voteban unvoteban unvoteban_client votebans ban unban bans set_team"
+
+# if either a kickvote or spectator vote is started, the bot creates reactions that can be used to
+# abort the votes forcefully by reacting to the votes. Below you can see the expected emoji format.
+# in order for you to find out that string, you have to write your emoji with :f3:, then go back to
+# the beginning of the line and add a backslash (\) in front of that emoji. Then send the message and you will see
+# the needed parts <:f3:691397485327024209>, just take the f3:691397485327024209.
+F3_EMOJI=f3:691397485327024209
+F4_EMOJI=f4:691397506461859840
+
+# This option allows players to abort a vote and then punish the voting player.
+BAN_EMOJI=ban:691431549048193074
+
+# It is possible to insert your own command with the {ID} placeholder, which is replaced with the
+# voting player's ID. 
+# default: ban {ID} 5 violation of rules
+BAN_REPLACEMENT_COMMAND="voteban {ID} 1800"
 
 # this is the list of possible servers that can be moderated.
 # if the moderation bot is run on the same server as the Teeworlds servers,
@@ -157,6 +181,11 @@ This is done by defining a `logfile Server-5-` in the Teeworlds server configura
 
 The moderation bot ensures that the Discord message log is not older than 24 hours.
 This is takes some load off of Discord and ensures some privacy for the users that play on the servers, as the moderation staff does and should not have an extended access to such information.
+
+### Expiration of interacting with votes via Discord reactions
+
+After a vote has been started ingame, the discord bot allows for up to 30 seconds to interact with the vote, as the votes expire after that period of time.
+Any reactions that were pressed after that time slot do not do anything.
 
 ## Usage
 

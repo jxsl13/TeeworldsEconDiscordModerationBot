@@ -35,6 +35,8 @@ var (
 	mutesAndVotebansRegex = regexp.MustCompile(`\[Server\]: (.*)`)
 
 	moderatorMentions = regexp.MustCompile(`\[chat\]: .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*`) // first plurals, then singular
+
+	formatedSpecVoteKickStringRegex = regexp.MustCompile(`\*\*\[.*vote.*\]\*\*\: ([\d]+):'(.{0,20})' [^\d]{12,15} ([\d]+):'(.{0,20})'( to spectators)? with reason '(.+)'$`)
 )
 
 func init() {
@@ -131,6 +133,45 @@ func init() {
 		} else {
 			config.LogLevel = level
 		}
+	}
+
+	f3emoji, ok := env["F3_EMOJI"]
+	if ok && len(f3emoji) > 0 {
+		config.SetF3Emoji(f3emoji)
+	} else if ok {
+		config.SetF3Emoji("🇾")
+		log.Println("Expected emoji has the format F3_EMOJI: <:f3:691397485327024209> -> f3:691397485327024209")
+	} else {
+		config.SetF3Emoji("🇾")
+	}
+
+	f4emoji, ok := env["F4_EMOJI"]
+	if ok && len(f4emoji) > 0 {
+		config.SetF4Emoji(f4emoji)
+	} else if ok {
+		config.SetF4Emoji("🇳")
+		log.Println("Expected emoji has the format F4_EMOJI: <:f4:691397506461859840> -> f4:691397506461859840")
+	} else {
+		config.SetF4Emoji("🇳")
+	}
+
+	banEmoji, ok := env["BAN_EMOJI"]
+	if ok && len(banEmoji) > 0 {
+		config.SetBanEmoji(banEmoji)
+	} else if ok {
+		config.SetBanEmoji("🔨")
+		log.Println("Expected emoji has the format Ban_EMOJI: <:ban:529812261460508687> -> ban:529812261460508687")
+	} else {
+		config.SetBanEmoji("🔨")
+	}
+
+	banReplaceCmd, ok := env["BAN_REPLACEMENT_COMMAND"]
+	if ok && (strings.Contains(banReplaceCmd, "{ID}") || strings.Contains(banReplaceCmd, "{id}")) {
+		banReplaceCmd = strings.Replace(banReplaceCmd, "{ID}", "%s", 1)
+		banReplaceCmd = strings.Replace(banReplaceCmd, "{id}", "%s", 1)
+		config.BanReplacementCommand = banReplaceCmd
+	} else {
+		config.BanReplacementCommand = "ban %s 5 violation of rules"
 	}
 
 	log.Printf("\n%s", config.String())
@@ -415,10 +456,10 @@ func main() {
 			return
 		}
 
-		command := args[0][1:]
+		commandPrefix := args[0][1:]
 		arguments := strings.Join(args[1:], " ")
 
-		switch command {
+		switch commandPrefix {
 		case "add":
 			user := strings.Trim(arguments, " \n")
 			config.DiscordModerators.Add(user)
@@ -589,6 +630,7 @@ func main() {
 					}
 				}(channelID, initialMessageID, s)
 
+				// execution of discord commands
 				go func(addr address, channelID string, s *discordgo.Session) {
 					for {
 						select {
@@ -663,10 +705,154 @@ func main() {
 								}
 							}
 
-							_, err := s.ChannelMessageSend(channelID, line)
+							msg, err := s.ChannelMessageSend(channelID, line)
 							if err != nil {
 								log.Printf("error while sending line: %s\n", err.Error())
 							}
+
+							if strings.Contains(line, "[kickvote") || strings.Contains(line, "[specvote") {
+								// add reactions to force vote via reactions instead of commands
+								err := s.MessageReactionAdd(channelID, msg.ID, config.F3Emoji())
+								if err != nil {
+									log.Printf("You have configured an incorrect F3_EMOJI: %s : %s\n", config.F3Emoji(), err.Error())
+									config.ResetEmojis()
+									continue
+								}
+								err = s.MessageReactionAdd(channelID, msg.ID, config.F4Emoji())
+								if err != nil {
+									log.Printf("You have configured an incorrect F4_EMOJI: %s : %s\n", config.F4Emoji(), err.Error())
+									config.ResetEmojis()
+									continue
+								}
+								err = s.MessageReactionAdd(channelID, msg.ID, config.BanEmoji())
+								if err != nil {
+									log.Printf("You have configured an incorrect BAN_EMOJI: %s : %s\n", config.BanEmoji(), err.Error())
+									config.ResetEmojis()
+									continue
+								}
+
+								// handle votes.
+								go func(ctx context.Context, fmtLine string, s *discordgo.Session, channelID string, msg *discordgo.Message) {
+
+									// a vote takes 30 seconds
+									end := time.Now().Add(30 * time.Second)
+									for {
+										select {
+										case <-ctx.Done():
+											return
+										default:
+
+											if time.Now().After(end) {
+												return
+											}
+											time.Sleep(time.Second)
+
+											f3Users, err := s.MessageReactions(channelID, msg.ID, config.F3Emoji(), 100)
+											if err != nil {
+												log.Println("error retrieving f3 reactions: ", err.Error())
+												return
+											}
+
+											f4Users, err := s.MessageReactions(channelID, msg.ID, config.F4Emoji(), 100)
+											if err != nil {
+												log.Println("error retrieving f4 reactions: ", err.Error())
+												return
+											}
+
+											banUsers, err := s.MessageReactions(channelID, msg.ID, config.BanEmoji(), 100)
+											if err != nil {
+												log.Println("error retrieving ban reactions: ", err.Error())
+												return
+											}
+
+											if len(f3Users) == 1 && len(f4Users) == 1 && len(banUsers) == 1 {
+												// the bot's reaction, no user interaction, yet
+												continue
+											}
+
+											// check for f3 votes
+											for _, f3User := range f3Users {
+
+												discordUser := f3User.String()
+
+												if config.DiscordModerators.Contains(discordUser) {
+
+													addr, _ := config.ChannelAddress.Get(discordChannel(channelID))
+
+													config.DiscordCommandQueue[addr] <- command{
+														Author:  discordUser,
+														Command: "vote yes",
+													}
+													return
+												}
+											}
+
+											// check f4 votes
+											for _, f4User := range f4Users {
+
+												discordUser := f4User.String()
+
+												if config.DiscordModerators.Contains(discordUser) {
+
+													if config.DiscordModerators.Contains(discordUser) {
+
+														addr, _ := config.ChannelAddress.Get(discordChannel(channelID))
+
+														config.DiscordCommandQueue[addr] <- command{
+															Author:  discordUser,
+															Command: "vote no",
+														}
+														return
+													}
+												}
+											}
+
+											// check ban votes
+											for _, banUser := range banUsers {
+												if config.DiscordModerators.Contains(banUser.String()) {
+
+													discordUser := banUser.String()
+
+													if config.DiscordModerators.Contains(discordUser) {
+
+														matches := formatedSpecVoteKickStringRegex.FindStringSubmatch(line)
+														votingID, _ := strconv.Atoi(matches[1])
+														votingNickname := matches[2]
+
+														addr, _ := config.ChannelAddress.Get(discordChannel(channelID))
+														server := config.ServerStates[addr]
+														votingPlayer := server.Player(votingID)
+
+														stillOnline := false
+														if votingPlayer.Name == votingNickname {
+															stillOnline = true
+														}
+
+														// ban player if still online
+														if stillOnline {
+															config.DiscordCommandQueue[addr] <- command{
+																Author:  discordUser,
+																Command: fmt.Sprintf(config.BanReplacementCommand, votingPlayer.ID),
+															}
+														}
+
+														// abort vote in any case
+														config.DiscordCommandQueue[addr] <- command{
+															Author:  discordUser,
+															Command: "vote no",
+														}
+
+														return
+													}
+												}
+											}
+
+											// continue checking for emote changes
+										}
+									}
+								}(ctx, line, s, channelID, msg)
+							}
+
 						}
 
 					}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type password string
@@ -24,8 +25,59 @@ type configuration struct {
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
 	DiscordCommandQueue      map[address]chan command
-	LogLevel                 int // 0 : chat & votes & rcon,  1: & join & leave,  2: & whisper
+	LogLevel                 int // 0 : chat & votes & rcon,  1: & whisper, 2: & join & leave
 
+	emojiMu  sync.RWMutex
+	f3Emoji  string
+	f4Emoji  string
+	banEmoji string
+
+	BanReplacementCommand string // formatstring
+
+}
+
+func (c *configuration) ResetEmojis() {
+	c.emojiMu.Lock()
+	defer c.emojiMu.Unlock()
+	c.f3Emoji = "🇾"
+	c.f4Emoji = "🇳"
+	c.banEmoji = "🔨"
+}
+
+func (c *configuration) F3Emoji() string {
+	c.emojiMu.RLock()
+	defer c.emojiMu.RUnlock()
+	return c.f3Emoji
+}
+
+func (c *configuration) F4Emoji() string {
+	c.emojiMu.RLock()
+	defer c.emojiMu.RUnlock()
+	return c.f4Emoji
+}
+
+func (c *configuration) BanEmoji() string {
+	c.emojiMu.RLock()
+	defer c.emojiMu.RUnlock()
+	return c.banEmoji
+}
+
+func (c *configuration) SetF3Emoji(emoji string) {
+	c.emojiMu.Lock()
+	defer c.emojiMu.Unlock()
+	c.f3Emoji = emoji
+}
+
+func (c *configuration) SetF4Emoji(emoji string) {
+	c.emojiMu.Lock()
+	defer c.emojiMu.Unlock()
+	c.f4Emoji = emoji
+}
+
+func (c *configuration) SetBanEmoji(emoji string) {
+	c.emojiMu.Lock()
+	defer c.emojiMu.Unlock()
+	c.banEmoji = emoji
 }
 
 func (c *configuration) Close() {
@@ -47,6 +99,14 @@ func (c *configuration) String() string {
 
 	sb.WriteString(fmt.Sprintf("DiscordToken : %s\n", c.DiscordToken))
 	sb.WriteString("\n")
+
+	sb.WriteString("Discord Emojis:\n")
+	sb.WriteString(fmt.Sprintf("\tF3  : %s\n", c.F3Emoji()))
+	sb.WriteString(fmt.Sprintf("\tF4  : %s\n", c.F4Emoji()))
+	sb.WriteString(fmt.Sprintf("\tBan : %s\n", c.BanEmoji()))
+	sb.WriteString("\n")
+	sb.WriteString("Ban Replacement: " + fmt.Sprintf(c.BanReplacementCommand, "{ID}"))
+	sb.WriteString("\n\n")
 
 	sb.WriteString(fmt.Sprintf("Administrator: \n\t%s\n\n", c.DiscordAdmin))
 
