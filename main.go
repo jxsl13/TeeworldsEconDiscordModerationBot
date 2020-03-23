@@ -38,6 +38,8 @@ var (
 
 	formatedSpecVoteKickStringRegex = regexp.MustCompile(`\*\*\[.*vote.*\]\*\*\: ([\d]+):'(.{0,20})' [^\d]{12,15} ([\d]+):'(.{0,20})'( to spectators)? with reason '(.+)'$`)
 
+	formatedBanRegex = regexp.MustCompile(`\*\*\[bans\]\*\*: '(.*)' banned for (.*) with reason: '(.*)'$`)
+
 	forcedYesRegex = regexp.MustCompile(`\[server\]: forcing vote yes$`)
 	forcedNoRegex  = regexp.MustCompile(`\[server\]: forcing vote no$`)
 )
@@ -163,18 +165,28 @@ func init() {
 		config.SetBanEmoji(banEmoji)
 	} else if ok {
 		config.SetBanEmoji("🔨")
-		log.Println("Expected emoji has the format Ban_EMOJI: <:ban:529812261460508687> -> ban:529812261460508687")
+		log.Println("Expected emoji has the format BAN_EMOJI: <:ban:529812261460508687> -> ban:529812261460508687")
 	} else {
 		config.SetBanEmoji("🔨")
 	}
 
 	banReplaceCmd, ok := env["BAN_REPLACEMENT_COMMAND"]
 	if ok && (strings.Contains(banReplaceCmd, "{ID}") || strings.Contains(banReplaceCmd, "{id}")) {
-		banReplaceCmd = strings.Replace(banReplaceCmd, "{ID}", "%s", 1)
-		banReplaceCmd = strings.Replace(banReplaceCmd, "{id}", "%s", 1)
+		banReplaceCmd = strings.Replace(banReplaceCmd, "{ID}", "%d", 1)
+		banReplaceCmd = strings.Replace(banReplaceCmd, "{id}", "%d", 1)
 		config.BanReplacementCommand = banReplaceCmd
 	} else {
-		config.BanReplacementCommand = "ban %s 5 violation of rules"
+		config.BanReplacementCommand = "ban %d 5 violation of rules"
+	}
+
+	unbanEmoji, ok := env["UNBAN_EMOJI"]
+	if ok && len(unbanEmoji) > 0 {
+		config.SetUnbanEmoji(unbanEmoji)
+	} else if ok {
+		config.SetUnbanEmoji("❎")
+		log.Println("Expected emoji has the format UNBAN_EMOJI: <:sendhelp:529812377441402881> -> sendhelp:529812377441402881")
+	} else {
+		config.SetUnbanEmoji("❎")
 	}
 
 	log.Printf("\n%s", config.String())
@@ -364,6 +376,527 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 	return
 }
 
+func handleClean(s *discordgo.Session, m *discordgo.MessageCreate) {
+	msg, _ := s.ChannelMessageSend(m.ChannelID, "starting channel cleanup...")
+
+	initialID := msg.ChannelID
+	for msgs, err := s.ChannelMessages(initialID, 100, msg.ID, "", ""); len(msgs) > 0 && err == nil; {
+		if err != nil {
+			log.Printf("error while cleaning up a channel: %s\n", err.Error())
+			break
+		}
+		if len(msgs) == 0 {
+			break
+		}
+
+		msgIDs := make([]string, 0, len(msgs))
+
+		for _, msg := range msgs {
+			msgIDs = append(msgIDs, msg.ID)
+		}
+
+		delErr := s.ChannelMessagesBulkDelete(msg.ChannelID, msgIDs)
+		if delErr != nil {
+			log.Printf("error while trying to bulk delete %d messages: %s", len(msgIDs), delErr)
+			s.ChannelMessageSend(msg.ChannelID, "The bot does not have enough permissions to cleanup the channel.")
+
+			// delete initial message in any case.
+			s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+			return
+		}
+
+		initialID = msgIDs[len(msgIDs)-1]
+	}
+
+	s.ChannelMessageDelete(msg.ChannelID, msg.ID)
+	s.ChannelMessageSend(m.ChannelID, "cleanup done!")
+}
+
+func handleHelp(s *discordgo.Session, m *discordgo.MessageCreate) {
+	// help is not part of the commands
+	sb := strings.Builder{}
+	sb.WriteString("Available Commands: \n")
+	sb.WriteString("```")
+	for _, cmd := range config.DiscordModeratorCommands.Commands() {
+		sb.WriteString(fmt.Sprintf("?%s\n", cmd))
+	}
+	sb.WriteString("```")
+
+	sb.WriteString("Moderators:\n")
+	sb.WriteString("```")
+	for _, moderator := range config.DiscordModerators.Users() {
+		sb.WriteString(fmt.Sprintf("%s\n", moderator))
+	}
+	sb.WriteString("```")
+
+	s.ChannelMessageSend(m.ChannelID, sb.String())
+}
+
+func handleStatus(s *discordgo.Session, m *discordgo.MessageCreate, addr address) {
+	// handle status from cache data
+	players := config.ServerStates[addr].Status()
+
+	if len(players) == 0 {
+		s.ChannelMessageSend(m.ChannelID, "There are currently no players online.")
+		return
+	}
+
+	sb := strings.Builder{}
+	sb.WriteString("```")
+	for _, p := range players {
+		sb.WriteString(fmt.Sprintf("id=%-2d %s\n", p.ID, p.Name))
+	}
+	sb.WriteString("```")
+
+	s.ChannelMessageSend(m.ChannelID, sb.String())
+}
+
+func handleBans(s *discordgo.Session, m *discordgo.MessageCreate, addr address) {
+	numBans := config.ServerStates[addr].BanServer.Size()
+	if numBans == 0 {
+		s.ChannelMessageSend(m.ChannelID, "[banlist]: 0 ban(s)")
+		return
+	}
+	msg := fmt.Sprintf("[banlist]: %d ban(s)\n```%s```\n", numBans, config.ServerStates[addr].BanServer.String())
+	s.ChannelMessageSend(m.ChannelID, msg)
+	return
+}
+
+func handleModerate(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
+	addr := address(args[1])
+	pass, ok := config.EconPasswords[addr]
+
+	if !ok {
+		s.ChannelMessageSend(m.ChannelID, "unknown server address")
+		return
+	}
+
+	currentChannel := discordChannel(m.ChannelID)
+
+	// handle single time registration with a discord channel
+	if config.ChannelAddress.AlreadyRegistered(addr) {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The address %s is already registered with a channel.", addr))
+		return
+	}
+	config.ChannelAddress.Set(currentChannel, addr)
+
+	// start routine to listen to specified server.
+	go serverRoutine(ctx, m, m.ID, s, addr, pass)
+
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Started listening to server %s", addr))
+}
+
+func cleanupRoutine(routineContext context.Context, s *discordgo.Session, channelID, initialMessageID string) {
+	for {
+		select {
+		case <-routineContext.Done():
+			return
+		default:
+			messages, err := s.ChannelMessages(channelID, 100, initialMessageID, "", "")
+			if err != nil {
+				log.Printf("error on purging previous channel messages: %s", err.Error())
+				continue
+			}
+			if len(messages) == 0 {
+				log.Println("finished cleaning up old messages.")
+				return
+			}
+			ids := make([]string, 0, 100)
+
+			for _, msg := range messages {
+				ids = append(ids, msg.ID)
+			}
+
+			err = s.ChannelMessagesBulkDelete(channelID, ids)
+			if err != nil {
+				log.Printf("error on bulk deleting previous messages: %s", err.Error())
+				return
+			}
+
+			log.Printf("deleted %d old messages.", len(messages))
+		}
+	}
+}
+
+func logCleanupRoutine(routineContext context.Context, s *discordgo.Session, channelID, initialMessageID string, addr address) {
+
+	for {
+		timer := time.NewTimer(2 * time.Minute)
+
+		select {
+		case <-routineContext.Done():
+			log.Printf("closing main routine of: %s\n", addr)
+			return
+		case <-timer.C:
+			messages, err := s.ChannelMessages(channelID, 100, "", initialMessageID, "")
+			if err != nil {
+				log.Printf("error on cleanup: %s", err.Error())
+				continue
+			}
+
+			cleanedUp := 0
+			for _, message := range messages {
+
+				created, err := message.Timestamp.Parse()
+				if err != nil {
+					log.Printf("error parsing message: %s", err.Error())
+					continue
+				}
+
+				// TODO: make variable
+				if time.Since(created) > 24*time.Hour {
+
+					err := s.ChannelMessageDelete(channelID, message.ID)
+					if err != nil {
+						log.Printf("Error occurred while deleting messages: %s", err.Error())
+					} else {
+						cleanedUp++
+					}
+				}
+			}
+		}
+	}
+}
+
+func commandQueueRoutine(routineContext context.Context, s *discordgo.Session, channelID string, conn *econ.Conn, addr address) {
+
+	if conn.RemoteAddr().String() != string(addr) {
+		panic("expected addr == conn.RemoteAddr()")
+	}
+
+	for {
+		select {
+		case <-routineContext.Done():
+			log.Printf("closing command queue routine of: %s\n", conn.RemoteAddr())
+			return
+		case cmd, ok := <-config.DiscordCommandQueue[addr]:
+			if !ok {
+				return
+			}
+
+			lineToExecute, send, err := parseCommandLine(cmd.Command)
+			if err != nil {
+				s.ChannelMessageSend(channelID, err.Error())
+				continue
+			}
+			if send {
+				conn.WriteLine(fmt.Sprintf("echo [Discord] user '%s' executed rcon '%s'", strings.Replace(cmd.Author, "#", "_", -1), lineToExecute))
+				conn.WriteLine(lineToExecute)
+			}
+		}
+	}
+}
+
+func replaceModeratorMentions(s *discordgo.Session, m *discordgo.MessageCreate, line string) string {
+	matches := moderatorMentions.FindStringSubmatch(line)
+	if len(matches) == (1 + 1) {
+
+		// there is a role configured
+		if len(config.DiscordModeratorRole) > 0 {
+			mention := matches[1]
+
+			roles, _ := s.GuildRoles(m.GuildID)
+
+			mentionReplace := ""
+			for _, role := range roles {
+				if strings.Contains(role.Name, config.DiscordModeratorRole) {
+					mentionReplace = role.Mention()
+					break
+				}
+			}
+
+			if len(mentionReplace) > 0 {
+				return strings.ReplaceAll(line, mention, mentionReplace)
+			}
+			return line
+		}
+	}
+	return line
+}
+
+func handleMessageReactions(routineContext context.Context, s *discordgo.Session, msg *discordgo.Message, line, fmtLine string) {
+
+	if strings.Contains(fmtLine, "[kickvote") || strings.Contains(fmtLine, "[specvote") {
+
+		// add reactions to force vote via reactions instead of commands
+		errF3 := s.MessageReactionAdd(msg.ChannelID, msg.ID, config.F3Emoji())
+		errF4 := s.MessageReactionAdd(msg.ChannelID, msg.ID, config.F4Emoji())
+		errBan := s.MessageReactionAdd(msg.ChannelID, msg.ID, config.BanEmoji())
+
+		if errF3 != nil || errF4 != nil || errBan != nil {
+			fmtStr := "You have configured an incorrect F3_EMOJI, F4_EMOJI or BAN_EMOJI: \n\t%s\n\t%s\n\t%s\n"
+			log.Printf(fmtStr, config.F3Emoji(), config.F4Emoji(), config.BanEmoji())
+			config.ResetEmojis()
+
+			s.MessageReactionAdd(msg.ChannelID, msg.ID, config.F3Emoji())
+			s.MessageReactionAdd(msg.ChannelID, msg.ID, config.F4Emoji())
+			s.MessageReactionAdd(msg.ChannelID, msg.ID, config.BanEmoji())
+		}
+
+		// handle votes.
+		go voteReactionsRoutine(routineContext, s, msg, fmtLine, line)
+
+	} else if strings.Contains(fmtLine, "**[bans]**") {
+		matches := formatedBanRegex.FindStringSubmatch(fmtLine)
+		if len(matches) != 4 {
+			return
+		}
+
+		nickname := matches[1]
+		reason := matches[3]
+
+		addr, ok := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
+		if !ok {
+			return
+		}
+
+		server := config.ServerStates[addr]
+		playerBan, ok := server.BanServer.GetBanByNameAndReason(nickname, reason)
+		if !ok {
+			return
+		}
+
+		go func(routineContext context.Context, s *discordgo.Session, msg *discordgo.Message, playerBan ban) {
+
+			defer log.Println("Stopping ban tracking routine of:", playerBan.Player.Name)
+
+			err := s.MessageReactionAdd(msg.ChannelID, msg.ID, config.UnbanEmoji())
+			if err != nil {
+				fmtStr := "You have configured an incorrect UNBAN_EMOJI:\n\t%s\n"
+				log.Printf(fmtStr, config.UnbanEmoji())
+				config.ResetEmojis()
+
+				s.MessageReactionAdd(msg.ChannelID, msg.ID, config.UnbanEmoji())
+			}
+
+			for {
+				select {
+				case <-routineContext.Done():
+					return
+				default:
+					if playerBan.Expired() {
+						return
+					}
+
+					time.Sleep(1 * time.Second)
+
+					unbanUsers, err := s.MessageReactions(msg.ChannelID, msg.ID, config.UnbanEmoji(), 10)
+					if err != nil {
+						return
+					}
+
+					// bot's reaction
+					if len(unbanUsers) == 1 {
+						continue
+					}
+
+					for _, unbanUser := range unbanUsers {
+						discordUser := unbanUser.String()
+
+						if config.DiscordModerators.Contains(discordUser) {
+
+							addr, _ := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
+
+							config.DiscordCommandQueue[addr] <- command{
+								Author:  discordUser,
+								Command: fmt.Sprintf("unban %s", playerBan.Player.Address),
+							}
+							return
+						}
+
+					}
+				}
+			}
+
+		}(routineContext, s, msg, playerBan)
+
+	}
+
+}
+
+func voteReactionsRoutine(routineContext context.Context, s *discordgo.Session, msg *discordgo.Message, fmtLine, line string) {
+
+	// a vote takes 30 seconds
+	end := time.Now().Add(30 * time.Second)
+	for {
+		select {
+		case <-routineContext.Done():
+			return
+		default:
+
+			// stopping routine, as the vote timed out.
+			if time.Now().After(end) {
+				return
+			}
+
+			time.Sleep(time.Second)
+
+			f3Users, errF3 := s.MessageReactions(msg.ChannelID, msg.ID, config.F3Emoji(), 10)
+			f4Users, errF4 := s.MessageReactions(msg.ChannelID, msg.ID, config.F4Emoji(), 10)
+			banUsers, errBan := s.MessageReactions(msg.ChannelID, msg.ID, config.BanEmoji(), 10)
+			if errF3 != nil || errF4 != nil || errBan != nil {
+				log.Println("Resetting vote emojis to default values, as they could not be retrieved.")
+				config.ResetEmojis()
+
+				f3Users, _ = s.MessageReactions(msg.ChannelID, msg.ID, config.F3Emoji(), 10)
+				f4Users, _ = s.MessageReactions(msg.ChannelID, msg.ID, config.F4Emoji(), 10)
+				banUsers, _ = s.MessageReactions(msg.ChannelID, msg.ID, config.BanEmoji(), 10)
+			}
+
+			if len(f3Users) == 1 && len(f4Users) == 1 && len(banUsers) == 1 {
+				// the bot's reaction, no user interaction, yet
+				continue
+			}
+
+			// check for f3 votes
+			for _, f3User := range f3Users {
+
+				discordUser := f3User.String()
+
+				if config.DiscordModerators.Contains(discordUser) {
+
+					addr, _ := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
+
+					config.DiscordCommandQueue[addr] <- command{
+						Author:  discordUser,
+						Command: "vote yes",
+					}
+					return
+				}
+			}
+
+			// check f4 votes
+			for _, f4User := range f4Users {
+
+				discordUser := f4User.String()
+
+				if config.DiscordModerators.Contains(discordUser) {
+
+					if config.DiscordModerators.Contains(discordUser) {
+
+						addr, _ := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
+
+						config.DiscordCommandQueue[addr] <- command{
+							Author:  discordUser,
+							Command: "vote no",
+						}
+						return
+					}
+				}
+			}
+
+			// check ban votes
+			for _, banUser := range banUsers {
+				if config.DiscordModerators.Contains(banUser.String()) {
+
+					discordUser := banUser.String()
+
+					if config.DiscordModerators.Contains(discordUser) {
+
+						matches := formatedSpecVoteKickStringRegex.FindStringSubmatch(fmtLine)
+						votingID, _ := strconv.Atoi(matches[1])
+						votingNickname := matches[2]
+
+						addr, _ := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
+						server := config.ServerStates[addr]
+						votingPlayer := server.Player(votingID)
+
+						stillOnline := false
+						if votingPlayer.Name == votingNickname {
+							stillOnline = true
+						}
+
+						// ban player if still online
+						if stillOnline {
+							config.DiscordCommandQueue[addr] <- command{
+								Author:  discordUser,
+								Command: fmt.Sprintf(config.BanReplacementCommand, votingPlayer.ID),
+							}
+						}
+
+						// abort vote in any case
+						config.DiscordCommandQueue[addr] <- command{
+							Author:  discordUser,
+							Command: "vote no",
+						}
+
+						return
+					}
+				}
+			}
+
+			// continue checking for emote changes
+		}
+	}
+}
+
+func serverRoutine(ctx context.Context, m *discordgo.MessageCreate, initialMessageID string, s *discordgo.Session, addr address, pass password) {
+	// channel - server association
+	defer config.ChannelAddress.RemoveAddress(addr)
+
+	// sub goroutines
+	routineContext, routineCancel := context.WithCancel(ctx)
+	defer routineCancel()
+
+	// econ connection
+	conn, err := econ.DialTo(string(addr), string(pass))
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, err.Error())
+		return
+	}
+	defer conn.Close()
+
+	// cleanup all messages before the initial message
+	go cleanupRoutine(routineContext, s, m.ChannelID, initialMessageID)
+
+	// start channel history cleanup
+	go logCleanupRoutine(routineContext, s, m.ChannelID, initialMessageID, addr)
+
+	// execution of discord commands
+	go commandQueueRoutine(routineContext, s, m.ChannelID, conn, addr)
+
+	// handle econ line parsing
+	result := make(chan string)
+	defer close(result)
+
+	for {
+
+		// start routine for waiting for line
+		go func() {
+			line, err := conn.ReadLine()
+			if err != nil {
+				log.Println("Closing econ reader routine of:", addr)
+				// intended
+				return
+			}
+			result <- line
+		}()
+
+		// wait for read or abort
+		select {
+		case <-ctx.Done():
+			log.Printf("closing econ line parsing routine of: %s\n", addr)
+			return
+		case line := <-result:
+			// if read avalable, parse and if necessary, send
+			fmtLine, send := parseEconLine(line, config.ServerStates[addr])
+
+			if send {
+				// check for moderator mention
+				line = replaceModeratorMentions(s, m, fmtLine)
+
+				msg, err := s.ChannelMessageSend(m.ChannelID, fmtLine)
+				if err != nil {
+					log.Printf("error while sending line: %s\n", err.Error())
+				}
+
+				handleMessageReactions(routineContext, s, msg, line, fmtLine)
+			}
+
+		}
+	}
+}
+
 func main() {
 	defer config.Close()
 
@@ -403,59 +936,16 @@ func main() {
 
 			switch cmd {
 			case "help":
-				// help is not part of the commands
-				sb := strings.Builder{}
-				sb.WriteString("Available Commands: \n")
-				sb.WriteString("```")
-				for _, cmd := range config.DiscordModeratorCommands.Commands() {
-					sb.WriteString(fmt.Sprintf("?%s\n", cmd))
-				}
-				sb.WriteString("```")
-
-				sb.WriteString("Moderators:\n")
-				sb.WriteString("```")
-				for _, moderator := range config.DiscordModerators.Users() {
-					sb.WriteString(fmt.Sprintf("%s\n", moderator))
-				}
-				sb.WriteString("```")
-
-				s.ChannelMessageSend(m.ChannelID, sb.String())
-				return
+				handleHelp(s, m)
 			case "status":
-
-				// handle status from cache data
-				players := config.ServerStates[addr].Status()
-
-				if len(players) == 0 {
-					s.ChannelMessageSend(m.ChannelID, "There are currently no players online.")
-					return
-				}
-
-				sb := strings.Builder{}
-				sb.WriteString("```")
-				for _, p := range players {
-					sb.WriteString(fmt.Sprintf("id=%-2d %s\n", p.ID, p.Name))
-				}
-				sb.WriteString("```")
-
-				s.ChannelMessageSend(m.ChannelID, sb.String())
-
+				handleStatus(s, m, addr)
 			case "bans":
-				numBans := config.ServerStates[addr].BanServer.Size()
-				if numBans == 0 {
-					s.ChannelMessageSend(m.ChannelID, "[banlist]: 0 ban(s)")
-					return
-				}
-				msg := fmt.Sprintf("[banlist]: %d ban(s)\n```%s```\n", numBans, config.ServerStates[addr].BanServer.String())
-				s.ChannelMessageSend(m.ChannelID, msg)
+				handleBans(s, m, addr)
 			default:
 				// send other messages this way
 				config.DiscordCommandQueue[addr] <- command{Author: m.Author.String(), Command: cmd}
-
 			}
-
 			return
-
 		}
 
 		if !strings.HasPrefix(m.Content, "#") {
@@ -463,7 +953,8 @@ func main() {
 		}
 
 		if m.Author.String() != config.DiscordAdmin {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Not an admin, only '%s' is allowed to execute commands.", config.DiscordAdmin))
+			response := fmt.Sprintf("Not an admin, only '%s' is allowed to execute commands.", config.DiscordAdmin)
+			s.ChannelMessageSend(m.ChannelID, response)
 			return
 		}
 
@@ -478,6 +969,7 @@ func main() {
 
 		switch commandPrefix {
 		case "add":
+
 			user := strings.Trim(arguments, " \n")
 			config.DiscordModerators.Add(user)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Added %q to moderators", user))
@@ -493,410 +985,29 @@ func main() {
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Purged all moderators except %q", config.DiscordAdmin))
 			return
 		case "clean":
-			msg, _ := s.ChannelMessageSend(m.ChannelID, "starting channel cleanup...")
-
-			initialID := msg.ChannelID
-			for msgs, err := s.ChannelMessages(initialID, 100, msg.ID, "", ""); len(msgs) > 0 && err == nil; {
-				if err != nil {
-					log.Printf("error while cleaning up a channel: %s\n", err.Error())
-					break
-				}
-				if len(msgs) == 0 {
-					break
-				}
-
-				msgIDs := make([]string, 0, len(msgs))
-
-				for _, msg := range msgs {
-					msgIDs = append(msgIDs, msg.ID)
-				}
-
-				delErr := s.ChannelMessagesBulkDelete(msg.ChannelID, msgIDs)
-				if delErr != nil {
-					log.Printf("error while trying to bulk delete %d messages: %s", len(msgIDs), delErr)
-					s.ChannelMessageSend(msg.ChannelID, "The bot does not have enough permissions to cleanup the channel.")
-
-					// delete initial message in any case.
-					s.ChannelMessageDelete(msg.ChannelID, msg.ID)
-					return
-				}
-
-				initialID = msgIDs[len(msgIDs)-1]
-			}
-
-			s.ChannelMessageDelete(msg.ChannelID, msg.ID)
-			s.ChannelMessageSend(m.ChannelID, "cleanup done!")
-
+			handleClean(s, m)
+			return
 		case "moderate":
-
 			if len(args) < 2 {
+				s.ChannelMessageSend(m.ChannelID, "invalid command")
 				break
 			}
-			addr := address(args[1])
-			pass, ok := config.EconPasswords[addr]
-			currentChannel := discordChannel(m.ChannelID)
-
-			if !ok {
-				s.ChannelMessageSend(m.ChannelID, "unknown server address")
-				return
-			}
-
-			// handle single time registration with a discord channel
-			if config.ChannelAddress.AlreadyRegistered(addr) {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The address %s is already registered with a channel.", addr))
-				return
-			}
-			config.ChannelAddress.Set(currentChannel, addr)
-
-			// start routine to listen to specified server.
-			go func(ctx context.Context, channelID, initialMessageID string, s *discordgo.Session, addr address, pass password) {
-				// channel - server association
-				defer config.ChannelAddress.RemoveAddress(addr)
-
-				// sub goroutines
-				routineContext, routineCancel := context.WithCancel(ctx)
-				defer routineCancel()
-
-				// econ connection
-				conn, err := econ.DialTo(string(addr), string(pass))
-				if err != nil {
-					s.ChannelMessageSend(m.ChannelID, err.Error())
-					return
-				}
-				defer conn.Close()
-
-				// cleanup all messages before the initial message
-				go func(channelID, initialMessageID string, s *discordgo.Session) {
-					for {
-						select {
-						case <-routineContext.Done():
-							return
-						default:
-							messages, err := s.ChannelMessages(channelID, 100, initialMessageID, "", "")
-							if err != nil {
-								log.Printf("error on purging previous channel messages: %s", err.Error())
-								continue
-							}
-							if len(messages) == 0 {
-								log.Println("finished cleaning up old messages.")
-								return
-							}
-							ids := make([]string, 0, 100)
-
-							for _, msg := range messages {
-								ids = append(ids, msg.ID)
-							}
-
-							err = s.ChannelMessagesBulkDelete(channelID, ids)
-							if err != nil {
-								log.Printf("error on bulk deleting previous messages: %s", err.Error())
-								return
-							}
-
-							log.Printf("deleted %d old messages.", len(messages))
-						}
-					}
-				}(channelID, initialMessageID, s)
-
-				// start channel history cleanup
-				go func(channelID, initialMessageID string, s *discordgo.Session) {
-
-					if err != nil {
-						log.Println(err.Error())
-						return
-					}
-
-					for {
-						timer := time.NewTimer(2 * time.Minute)
-
-						select {
-						case <-routineContext.Done():
-							log.Printf("closing main routine of: %s\n", addr)
-							return
-						case <-timer.C:
-							messages, err := s.ChannelMessages(channelID, 100, "", initialMessageID, "")
-							if err != nil {
-								log.Printf("error on cleanup: %s", err.Error())
-								continue
-							}
-
-							cleanedUp := 0
-							for _, message := range messages {
-
-								created, err := message.Timestamp.Parse()
-								if err != nil {
-									log.Printf("error parsing message: %s", err.Error())
-									continue
-								}
-
-								// TODO: make variable
-								if time.Since(created) > 24*time.Hour {
-
-									err := s.ChannelMessageDelete(channelID, message.ID)
-									if err != nil {
-										log.Printf("Error occurred while deleting messages: %s", err.Error())
-									} else {
-										cleanedUp++
-									}
-								}
-							}
-							if cleanedUp > 0 {
-								log.Printf("cleaned up %d of history messages", cleanedUp)
-							}
-						}
-					}
-				}(channelID, initialMessageID, s)
-
-				// execution of discord commands
-				go func(addr address, channelID string, s *discordgo.Session) {
-					for {
-						select {
-						case <-routineContext.Done():
-							log.Printf("closing command queue routine of: %s\n", addr)
-							return
-						case cmd, ok := <-config.DiscordCommandQueue[addr]:
-							if !ok {
-								return
-							}
-
-							lineToExecute, send, err := parseCommandLine(cmd.Command)
-							if err != nil {
-								s.ChannelMessageSend(channelID, err.Error())
-								continue
-							}
-							if send {
-								conn.WriteLine(fmt.Sprintf("echo [Discord] user '%s' executed rcon '%s'", strings.Replace(cmd.Author, "#", "_", -1), lineToExecute))
-								conn.WriteLine(lineToExecute)
-							}
-						}
-					}
-				}(addr, channelID, s)
-
-				// handle econ line parsing
-				result := make(chan string)
-				defer close(result)
-
-				for {
-
-					// start routine for waiting for line
-					go func() {
-						line, err := conn.ReadLine()
-						if err != nil {
-							// intended
-							return
-						}
-						result <- line
-					}()
-
-					// wait for read or abort
-					select {
-					case <-ctx.Done():
-						log.Printf("closing econ line parsing routine of: %s\n", addr)
-						return
-					case line := <-result:
-						// if read avalable, parse and if necessary, send
-						line, send := parseEconLine(line, config.ServerStates[addr])
-						if send {
-
-							// check for moderator mention
-							matches := moderatorMentions.FindStringSubmatch(line)
-							if len(matches) == (1 + 1) {
-
-								// there is a role configured
-								if len(config.DiscordModeratorRole) > 0 {
-									mention := matches[1]
-
-									roles, _ := s.GuildRoles(m.GuildID)
-
-									mentionReplace := ""
-									for _, role := range roles {
-										if strings.Contains(role.Name, config.DiscordModeratorRole) {
-											mentionReplace = role.Mention()
-											break
-										}
-									}
-
-									if len(mentionReplace) > 0 {
-										line = strings.ReplaceAll(line, mention, mentionReplace)
-									}
-								}
-							}
-
-							msg, err := s.ChannelMessageSend(channelID, line)
-							if err != nil {
-								log.Printf("error while sending line: %s\n", err.Error())
-							}
-
-							if strings.Contains(line, "[kickvote") || strings.Contains(line, "[specvote") {
-								// add reactions to force vote via reactions instead of commands
-								err := s.MessageReactionAdd(channelID, msg.ID, config.F3Emoji())
-								if err != nil {
-									log.Printf("You have configured an incorrect F3_EMOJI: %s : %s\n", config.F3Emoji(), err.Error())
-									config.ResetEmojis()
-									continue
-								}
-								err = s.MessageReactionAdd(channelID, msg.ID, config.F4Emoji())
-								if err != nil {
-									log.Printf("You have configured an incorrect F4_EMOJI: %s : %s\n", config.F4Emoji(), err.Error())
-									config.ResetEmojis()
-									continue
-								}
-								err = s.MessageReactionAdd(channelID, msg.ID, config.BanEmoji())
-								if err != nil {
-									log.Printf("You have configured an incorrect BAN_EMOJI: %s : %s\n", config.BanEmoji(), err.Error())
-									config.ResetEmojis()
-									continue
-								}
-
-								// handle votes.
-								go func(ctx context.Context, fmtLine string, s *discordgo.Session, channelID string, msg *discordgo.Message) {
-
-									// a vote takes 30 seconds
-									end := time.Now().Add(30 * time.Second)
-									for {
-										select {
-										case <-ctx.Done():
-											return
-										default:
-
-											if time.Now().After(end) {
-												s.ChannelMessageSend(channelID, "**[server]**: vote timed out.")
-												return
-											}
-											time.Sleep(time.Second)
-
-											f3Users, err := s.MessageReactions(channelID, msg.ID, config.F3Emoji(), 100)
-											if err != nil {
-												log.Println("error retrieving f3 reactions: ", err.Error())
-												return
-											}
-
-											f4Users, err := s.MessageReactions(channelID, msg.ID, config.F4Emoji(), 100)
-											if err != nil {
-												log.Println("error retrieving f4 reactions: ", err.Error())
-												return
-											}
-
-											banUsers, err := s.MessageReactions(channelID, msg.ID, config.BanEmoji(), 100)
-											if err != nil {
-												log.Println("error retrieving ban reactions: ", err.Error())
-												return
-											}
-
-											if len(f3Users) == 1 && len(f4Users) == 1 && len(banUsers) == 1 {
-												// the bot's reaction, no user interaction, yet
-												continue
-											}
-
-											// check for f3 votes
-											for _, f3User := range f3Users {
-
-												discordUser := f3User.String()
-
-												if config.DiscordModerators.Contains(discordUser) {
-
-													addr, _ := config.ChannelAddress.Get(discordChannel(channelID))
-
-													config.DiscordCommandQueue[addr] <- command{
-														Author:  discordUser,
-														Command: "vote yes",
-													}
-													return
-												}
-											}
-
-											// check f4 votes
-											for _, f4User := range f4Users {
-
-												discordUser := f4User.String()
-
-												if config.DiscordModerators.Contains(discordUser) {
-
-													if config.DiscordModerators.Contains(discordUser) {
-
-														addr, _ := config.ChannelAddress.Get(discordChannel(channelID))
-
-														config.DiscordCommandQueue[addr] <- command{
-															Author:  discordUser,
-															Command: "vote no",
-														}
-														return
-													}
-												}
-											}
-
-											// check ban votes
-											for _, banUser := range banUsers {
-												if config.DiscordModerators.Contains(banUser.String()) {
-
-													discordUser := banUser.String()
-
-													if config.DiscordModerators.Contains(discordUser) {
-
-														matches := formatedSpecVoteKickStringRegex.FindStringSubmatch(line)
-														votingID, _ := strconv.Atoi(matches[1])
-														votingNickname := matches[2]
-
-														addr, _ := config.ChannelAddress.Get(discordChannel(channelID))
-														server := config.ServerStates[addr]
-														votingPlayer := server.Player(votingID)
-
-														stillOnline := false
-														if votingPlayer.Name == votingNickname {
-															stillOnline = true
-														}
-
-														// ban player if still online
-														if stillOnline {
-															config.DiscordCommandQueue[addr] <- command{
-																Author:  discordUser,
-																Command: fmt.Sprintf(config.BanReplacementCommand, votingPlayer.ID),
-															}
-														}
-
-														// abort vote in any case
-														config.DiscordCommandQueue[addr] <- command{
-															Author:  discordUser,
-															Command: "vote no",
-														}
-
-														return
-													}
-												}
-											}
-
-											// continue checking for emote changes
-										}
-									}
-								}(ctx, line, s, channelID, msg)
-							}
-
-						}
-
-					}
-				}
-
-			}(ctx, m.ChannelID, m.ID, s, addr, pass)
-
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Started listening to server %s", addr))
-			return
+			handleModerate(ctx, s, m, args)
 		case "spy":
 			nickname := strings.Trim(arguments, " \n")
 			config.SpiedOnPlayers.Add(nickname)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Spying on %q ", nickname))
-			return
 		case "unspy":
 			nickname := strings.Trim(arguments, " \n")
 			config.SpiedOnPlayers.Remove(nickname)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Stopped spying on %q", nickname))
-			return
 		case "purgespy":
 			config.SpiedOnPlayers.Reset()
 			s.ChannelMessageSend(m.ChannelID, "Purged all spied on players.")
-
+		default:
+			s.ChannelMessageSend(m.ChannelID, "invalid command: "+commandPrefix)
+			return
 		}
-
-		s.ChannelMessageSend(m.ChannelID, "invalid command")
 		return
 
 	})

@@ -73,6 +73,9 @@ F4_EMOJI=f4:691397506461859840
 # This option allows players to abort a vote and then punish the voting player.
 BAN_EMOJI=ban:691431549048193074
 
+# emoji shown when someone has been banned, by clicking it the player is unbanned.
+UNBAN_EMOJI=sendhelp:529812377441402881
+
 # It is possible to insert your own command with the {ID} placeholder, which is replaced with the
 # voting player's ID. 
 # default: ban {ID} 5 violation of rules

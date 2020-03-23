@@ -27,10 +27,11 @@ type configuration struct {
 	DiscordCommandQueue      map[address]chan command
 	LogLevel                 int // 0 : chat & votes & rcon,  1: & whisper, 2: & join & leave
 
-	emojiMu  sync.RWMutex
-	f3Emoji  string
-	f4Emoji  string
-	banEmoji string
+	emojiMu    sync.RWMutex
+	f3Emoji    string
+	f4Emoji    string
+	banEmoji   string
+	unbanEmoji string
 
 	BanReplacementCommand string // formatstring
 
@@ -42,6 +43,7 @@ func (c *configuration) ResetEmojis() {
 	c.f3Emoji = "🇾"
 	c.f4Emoji = "🇳"
 	c.banEmoji = "🔨"
+	c.unbanEmoji = "❎"
 }
 
 func (c *configuration) F3Emoji() string {
@@ -62,6 +64,12 @@ func (c *configuration) BanEmoji() string {
 	return c.banEmoji
 }
 
+func (c *configuration) UnbanEmoji() string {
+	c.emojiMu.RLock()
+	defer c.emojiMu.RUnlock()
+	return c.unbanEmoji
+}
+
 func (c *configuration) SetF3Emoji(emoji string) {
 	c.emojiMu.Lock()
 	defer c.emojiMu.Unlock()
@@ -78,6 +86,12 @@ func (c *configuration) SetBanEmoji(emoji string) {
 	c.emojiMu.Lock()
 	defer c.emojiMu.Unlock()
 	c.banEmoji = emoji
+}
+
+func (c *configuration) SetUnbanEmoji(emoji string) {
+	c.emojiMu.Lock()
+	defer c.emojiMu.Unlock()
+	c.unbanEmoji = emoji
 }
 
 func (c *configuration) Close() {
@@ -101,11 +115,13 @@ func (c *configuration) String() string {
 	sb.WriteString("\n")
 
 	sb.WriteString("Discord Emojis:\n")
-	sb.WriteString(fmt.Sprintf("\tF3  : %s\n", c.F3Emoji()))
-	sb.WriteString(fmt.Sprintf("\tF4  : %s\n", c.F4Emoji()))
-	sb.WriteString(fmt.Sprintf("\tBan : %s\n", c.BanEmoji()))
+	sb.WriteString(fmt.Sprintf("\tF3   : %s\n", c.F3Emoji()))
+	sb.WriteString(fmt.Sprintf("\tF4   : %s\n", c.F4Emoji()))
+	sb.WriteString(fmt.Sprintf("\tBan  : %s\n", c.BanEmoji()))
+	sb.WriteString(fmt.Sprintf("\tUnban: %s\n", c.UnbanEmoji()))
 	sb.WriteString("\n")
-	sb.WriteString("Ban Replacement: " + fmt.Sprintf(c.BanReplacementCommand, "{ID}"))
+
+	sb.WriteString("Ban Replacement: " + c.BanReplacementCommand)
 	sb.WriteString("\n\n")
 
 	sb.WriteString(fmt.Sprintf("Administrator: \n\t%s\n\n", c.DiscordAdmin))
