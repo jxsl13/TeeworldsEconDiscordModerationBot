@@ -563,7 +563,7 @@ func commandQueueRoutine(routineContext context.Context, s *discordgo.Session, c
 	for {
 		select {
 		case <-routineContext.Done():
-			log.Printf("closing command queue routine of: %s\n", conn.RemoteAddr().String())
+			log.Printf("closing command queue routine of: %s\n", addr)
 			return
 		case cmd, ok := <-config.DiscordCommandQueue[addr]:
 			if !ok {
