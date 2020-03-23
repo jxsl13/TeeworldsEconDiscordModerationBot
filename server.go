@@ -62,6 +62,10 @@ type player struct {
 	State   int
 }
 
+func (p *player) Valid() bool {
+	return p.ID >= 0
+}
+
 func (p *player) Online() bool {
 	return p.State == stateIngame
 }

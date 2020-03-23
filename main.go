@@ -170,13 +170,22 @@ func init() {
 		config.SetBanEmoji("🔨")
 	}
 
-	banReplaceCmd, ok := env["BAN_REPLACEMENT_COMMAND"]
-	if ok && (strings.Contains(banReplaceCmd, "{ID}") || strings.Contains(banReplaceCmd, "{id}")) {
-		banReplaceCmd = strings.Replace(banReplaceCmd, "{ID}", "%d", 1)
-		banReplaceCmd = strings.Replace(banReplaceCmd, "{id}", "%d", 1)
-		config.BanReplacementCommand = banReplaceCmd
+	banIDReplaceCmd, ok := env["BANID_REPLACEMENT_COMMAND"]
+	if ok && (strings.Contains(banIDReplaceCmd, "{ID}") || strings.Contains(banIDReplaceCmd, "{id}")) {
+		banIDReplaceCmd = strings.Replace(banIDReplaceCmd, "{ID}", "%d", 1)
+		banIDReplaceCmd = strings.Replace(banIDReplaceCmd, "{id}", "%d", 1)
+		config.BanReplacementIDCommand = banIDReplaceCmd
 	} else {
-		config.BanReplacementCommand = "ban %d 5 violation of rules"
+		config.BanReplacementIDCommand = "ban %d 5 violation of rules"
+	}
+
+	banIPReplaceCmd, ok := env["BANIP_REPLACEMENT_COMMAND"]
+	if ok && (strings.Contains(banIPReplaceCmd, "{IP}") || strings.Contains(banIPReplaceCmd, "{ip}")) {
+		banIPReplaceCmd = strings.Replace(banIPReplaceCmd, "{IP}", "%s", 1)
+		banIPReplaceCmd = strings.Replace(banIPReplaceCmd, "{ip}", "%s", 1)
+		config.BanReplacementIPCommand = banIPReplaceCmd
+	} else {
+		config.BanReplacementIDCommand = "ban %d 10 violation of rules"
 	}
 
 	unbanEmoji, ok := env["UNBAN_EMOJI"]
@@ -629,8 +638,24 @@ func handleMessageReactions(routineContext context.Context, s *discordgo.Session
 			s.MessageReactionAdd(msg.ChannelID, msg.ID, config.BanEmoji())
 		}
 
+		matches := formatedSpecVoteKickStringRegex.FindStringSubmatch(fmtLine)
+		votingPlayer := player{ID: -1}
+		votedPlayer := player{ID: -1}
+
+		if len(matches) == 7 {
+			votingID, _ := strconv.Atoi(matches[1])
+			votedID, _ := strconv.Atoi(matches[3])
+			server, ok := config.GetServerByChannelID(msg.ChannelID)
+			if !ok {
+				return
+			}
+
+			votingPlayer = server.Player(votingID)
+			votedPlayer = server.Player(votedID)
+		}
+
 		// handle votes.
-		go voteReactionsRoutine(routineContext, s, msg, fmtLine, line)
+		go voteReactionsRoutine(routineContext, s, msg, votingPlayer, votedPlayer)
 
 	} else if strings.Contains(fmtLine, "**[bans]**") {
 		matches := formatedBanRegex.FindStringSubmatch(fmtLine)
@@ -710,7 +735,7 @@ func handleMessageReactions(routineContext context.Context, s *discordgo.Session
 
 }
 
-func voteReactionsRoutine(routineContext context.Context, s *discordgo.Session, msg *discordgo.Message, fmtLine, line string) {
+func voteReactionsRoutine(routineContext context.Context, s *discordgo.Session, msg *discordgo.Message, votingPlayer, votedPlayer player) {
 
 	// a vote takes 30 seconds
 	end := time.Now().Add(30 * time.Second)
@@ -789,31 +814,54 @@ func voteReactionsRoutine(routineContext context.Context, s *discordgo.Session, 
 
 					if config.DiscordModerators.Contains(discordUser) {
 
-						matches := formatedSpecVoteKickStringRegex.FindStringSubmatch(fmtLine)
-						votingID, _ := strconv.Atoi(matches[1])
-						votingNickname := matches[2]
+						server, _ := config.GetServerByChannelID(msg.ChannelID)
+						addr, _ := config.GetAddressByChannelID(msg.ChannelID)
 
-						addr, _ := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
-						server := config.ServerStates[addr]
-						votingPlayer := server.Player(votingID)
-
-						stillOnline := false
-						if votingPlayer.Name == votingNickname {
-							stillOnline = true
-						}
-
-						// ban player if still online
-						if stillOnline {
+						player := server.PlayerByIP(votingPlayer.Address)
+						if player.Valid() && player.Online() {
+							// use online player's ID to ban him
 							config.DiscordCommandQueue[addr] <- command{
 								Author:  discordUser,
-								Command: fmt.Sprintf(config.BanReplacementCommand, votingPlayer.ID),
+								Command: fmt.Sprintf(config.BanReplacementIDCommand, player.ID),
 							}
-						}
 
-						// abort vote in any case
-						config.DiscordCommandQueue[addr] <- command{
-							Author:  discordUser,
-							Command: "vote no",
+							// abort vote in any case
+							config.DiscordCommandQueue[addr] <- command{
+								Author:  discordUser,
+								Command: "vote no",
+							}
+						} else {
+							// use the IP instead, when the player is not online.
+							config.DiscordCommandQueue[addr] <- command{
+								Author:  discordUser,
+								Command: fmt.Sprintf(config.BanReplacementIPCommand, votingPlayer.Address),
+							}
+
+							// abort vote in any case
+							config.DiscordCommandQueue[addr] <- command{
+								Author:  discordUser,
+								Command: "vote no",
+							}
+
+							retries := 10
+							for {
+								select {
+								case <-routineContext.Done():
+								default:
+									retries--
+									if retries < 0 {
+										return
+									}
+
+									ok := server.BanServer.SetPlayerAfterwards(votingPlayer)
+									if !ok {
+										time.Sleep(time.Second)
+										continue
+									}
+
+									return
+								}
+							}
 						}
 
 						return

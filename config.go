@@ -33,8 +33,25 @@ type configuration struct {
 	banEmoji   string
 	unbanEmoji string
 
-	BanReplacementCommand string // formatstring
+	BanReplacementIDCommand string // format string
+	BanReplacementIPCommand string // format string
+}
 
+func (c *configuration) GetAddressByChannelID(channelID string) (address, bool) {
+	return c.ChannelAddress.Get(discordChannel(channelID))
+}
+
+func (c *configuration) GetServerByChannelID(channelID string) (*server, bool) {
+	addr, ok := c.ChannelAddress.Get(discordChannel(channelID))
+	if !ok {
+		return nil, ok
+	}
+
+	server, ok := c.ServerStates[addr]
+	if !ok {
+		return nil, ok
+	}
+	return server, true
 }
 
 func (c *configuration) ResetEmojis() {
@@ -121,7 +138,8 @@ func (c *configuration) String() string {
 	sb.WriteString(fmt.Sprintf("\tUnban: %s\n", c.UnbanEmoji()))
 	sb.WriteString("\n")
 
-	sb.WriteString("Ban Replacement: " + c.BanReplacementCommand)
+	sb.WriteString("Ban Replacement ID: " + c.BanReplacementIDCommand + "\n")
+	sb.WriteString("Ban Replacement IP: " + c.BanReplacementIPCommand + "\n")
 	sb.WriteString("\n\n")
 
 	sb.WriteString(fmt.Sprintf("Administrator: \n\t%s\n\n", c.DiscordAdmin))

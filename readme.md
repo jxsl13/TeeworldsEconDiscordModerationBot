@@ -77,9 +77,14 @@ BAN_EMOJI=ban:691431549048193074
 UNBAN_EMOJI=sendhelp:529812377441402881
 
 # It is possible to insert your own command with the {ID} placeholder, which is replaced with the
-# voting player's ID. 
+# voting player's ID.
 # default: ban {ID} 5 violation of rules
-BAN_REPLACEMENT_COMMAND="voteban {ID} 1800"
+BANID_REPLACEMENT_COMMAND="voteban {ID} 1800"
+
+# if the player leaves after voting, one might think that it's an intended funvote, thus increasing
+# this second method that is used, if the player left the server.
+# default: "ban {IP} 10 violation of rules"
+BANIP_REPLACEMENT_COMMAND="voteban {IP} 3600"
 
 # this is the list of possible servers that can be moderated.
 # if the moderation bot is run on the same server as the Teeworlds servers,

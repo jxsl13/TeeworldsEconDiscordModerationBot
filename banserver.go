@@ -68,6 +68,19 @@ func (b *banServer) GetBanByNameAndReason(name, reason string) (bb ban, ok bool)
 	return ban{}, false
 }
 
+func (b *banServer) SetPlayerAfterwards(p player) (ok bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for idx, ban := range b.BanList {
+		if ban.Player.Address == p.Address {
+			b.BanList[idx].Player = p
+			return true
+		}
+	}
+	return false
+}
+
 func (b *banServer) UnbanIP(ip address) (ban, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
