@@ -560,14 +560,10 @@ func logCleanupRoutine(routineContext context.Context, s *discordgo.Session, cha
 
 func commandQueueRoutine(routineContext context.Context, s *discordgo.Session, channelID string, conn *econ.Conn, addr address) {
 
-	if conn.RemoteAddr().String() != string(addr) {
-		panic("expected addr == conn.RemoteAddr()")
-	}
-
 	for {
 		select {
 		case <-routineContext.Done():
-			log.Printf("closing command queue routine of: %s\n", conn.RemoteAddr())
+			log.Printf("closing command queue routine of: %s\n", conn.RemoteAddr().String())
 			return
 		case cmd, ok := <-config.DiscordCommandQueue[addr]:
 			if !ok {
