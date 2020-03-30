@@ -490,7 +490,7 @@ func handleModerate(ctx context.Context, s *discordgo.Session, m *discordgo.Mess
 	config.ChannelAddress.Set(currentChannel, addr)
 
 	// start routine to listen to specified server.
-	go serverRoutine(ctx, m, m.ID, s, addr, pass)
+	go serverRoutine(ctx, s, m, addr, pass)
 
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Started listening to server %s", addr))
 }
@@ -874,9 +874,11 @@ func voteReactionsRoutine(routineContext context.Context, s *discordgo.Session, 
 	}
 }
 
-func serverRoutine(ctx context.Context, m *discordgo.MessageCreate, initialMessageID string, s *discordgo.Session, addr address, pass password) {
+func serverRoutine(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate, addr address, pass password) {
 	// channel - server association
 	defer config.ChannelAddress.RemoveAddress(addr)
+	defer s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Stopped listening to server %s", addr))
+	initialMessageID := m.ID
 
 	// sub goroutines
 	routineContext, routineCancel := context.WithCancel(ctx)
