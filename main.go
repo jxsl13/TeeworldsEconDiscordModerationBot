@@ -927,7 +927,7 @@ func serverRoutine(ctx context.Context, m *discordgo.MessageCreate, initialMessa
 
 			if send {
 				// check for moderator mention
-				line = replaceModeratorMentions(s, m, fmtLine)
+				fmtLine = replaceModeratorMentions(s, m, fmtLine)
 
 				msg, err := s.ChannelMessageSend(m.ChannelID, fmtLine)
 				if err != nil {
