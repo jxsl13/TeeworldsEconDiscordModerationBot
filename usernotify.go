@@ -6,6 +6,7 @@ import (
 )
 
 type discordUserMention string
+type nickname string
 
 // NotifyMap maps one player name to a discord user.
 type NotifyMap struct {
