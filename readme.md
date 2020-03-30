@@ -143,7 +143,6 @@ Stop spying on a specific player's whisper messages.
 
 Remove all spied on players from the spy list.
 
-
 ## Moderator commands
 
 Moderators can execute Teeworlds server commands the same way they usually do in the remote console (rcon).
@@ -162,6 +161,14 @@ Examples:
 
 # move a player to the spectators
 ?set_team 13 -1
+
+# nofify the moderator when a specific player with a specific nickname joins.
+# regardless of the current logging level.
+?notify nameless tee
+
+# remove all notifications.
+?unnotify
+
 ```
 
 Any command specified in the `.env` file within `DISCORD_MODERATOR_COMMANDS` can be used by the administrator and the moderation staff.
