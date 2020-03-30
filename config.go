@@ -22,6 +22,7 @@ type configuration struct {
 	DiscordAdmin             string
 	DiscordModerators        userSet
 	SpiedOnPlayers           userSet
+	JoinNotify               *NotifyMap
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
 	DiscordCommandQueue      map[address]chan command

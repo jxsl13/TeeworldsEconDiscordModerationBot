@@ -52,6 +52,7 @@ func init() {
 		ChannelAddress:           newChannelAddressMap(),
 		DiscordModerators:        newUserSet(),
 		SpiedOnPlayers:           newUserSet(),
+		JoinNotify:               newNotifyMap(),
 		DiscordModeratorCommands: newCommandSet(),
 		DiscordCommandQueue:      make(map[address]chan command),
 	}
@@ -101,6 +102,10 @@ func init() {
 		}
 	}
 	config.DiscordModeratorCommands.Add("help")
+	config.DiscordModeratorCommands.Add("status")
+	config.DiscordModeratorCommands.Add("bans")
+	config.DiscordModeratorCommands.Add("notify")
+	config.DiscordModeratorCommands.Add("unnotify")
 
 	moderatorRole, ok := env["DISCORD_MODERATOR_ROLE"]
 	if ok && len(moderatorRole) > 0 {
@@ -218,7 +223,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 
 		// the server consumed the line, so no further
 		// parsing is needed
-		if consumed, fmtLine := server.ParseLine(line); consumed {
+		if consumed, fmtLine := server.ParseLine(line, config.JoinNotify); consumed {
 			result = fmtLine
 			if fmtLine != "" {
 				send = true
@@ -320,7 +325,7 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 		return
 	} else if strings.Contains(line, "[net_ban]") {
 
-		if consumed, fmtLine := server.ParseLine(line); consumed {
+		if consumed, fmtLine := server.ParseLine(line, config.JoinNotify); consumed {
 			result = fmtLine
 			if fmtLine != "" {
 				send = true
@@ -469,6 +474,20 @@ func handleBans(s *discordgo.Session, m *discordgo.MessageCreate, addr address) 
 	msg := fmt.Sprintf("[banlist]: %d ban(s)\n```%s```\n", numBans, config.ServerStates[addr].BanServer.String())
 	s.ChannelMessageSend(m.ChannelID, msg)
 	return
+}
+
+func handleNotify(s *discordgo.Session, m *discordgo.MessageCreate, nickname string) {
+
+	config.JoinNotify.Add(m.Author.Mention(), nickname)
+	content := fmt.Sprintf("%s's notification request for '%s' received.", m.Author.Mention(), nickname)
+	s.ChannelMessageSend(m.ChannelID, content)
+}
+
+func handleUnnotify(s *discordgo.Session, m *discordgo.MessageCreate) {
+	config.JoinNotify.Remove(m.Author.Mention())
+
+	content := fmt.Sprintf("Removed all of %s's notification requests.", m.Author.Mention())
+	s.ChannelMessageSend(m.ChannelID, content)
 }
 
 func handleModerate(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
@@ -980,13 +999,18 @@ func main() {
 				return
 			}
 
-			switch cmd {
+			switch cmdTokens[0] {
 			case "help":
 				handleHelp(s, m)
 			case "status":
 				handleStatus(s, m, addr)
 			case "bans":
 				handleBans(s, m, addr)
+			case "notify":
+				argsLine := strings.Join(cmdTokens[1:], " ")
+				handleNotify(s, m, strings.TrimSpace(argsLine))
+			case "unnotify":
+				handleUnnotify(s, m)
 			default:
 				// send other messages this way
 				config.DiscordCommandQueue[addr] <- command{Author: m.Author.String(), Command: cmd}

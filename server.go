@@ -94,7 +94,7 @@ func newServer() *server {
 }
 
 // ParseLine parses a line from econ or logs, which affects the internal server state.
-func (s *server) ParseLine(line string) (consumed bool, logline string) {
+func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logline string) {
 	if strings.Contains(line, "[server]") {
 
 		match := []string{}
@@ -126,6 +126,25 @@ func (s *server) ParseLine(line string) (consumed bool, logline string) {
 		if len(match) == 3 {
 			id, _ := strconv.Atoi(match[1])
 			s.players[id].State = stateIngame
+
+			// notification requested
+			if notify != nil {
+				var sb strings.Builder
+
+				mentions := notify.Tracked(s.players[id].Name)
+				if len(mentions) > 0 {
+
+					for idx, mention := range mentions {
+						sb.WriteString(mention)
+						if idx < len(mentions)-1 {
+							sb.WriteString(" ")
+						}
+					}
+
+					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", s.players[id].Name, id, sb.String())
+				}
+
+			}
 
 			if config.LogLevel >= 2 {
 				return true, fmt.Sprintf("[server]: '%s' joined the server with id %d", s.players[id].Name, id)
