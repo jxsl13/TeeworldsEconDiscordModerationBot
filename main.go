@@ -319,6 +319,8 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			rank := matches[2]
 
 			result = fmt.Sprintf("**[rcon]**: '%s' authed as **%s**", server.Player(id).Name, rank)
+			send = true
+			return
 		}
 
 		matches = executeRconCommand.FindStringSubmatch(line)
