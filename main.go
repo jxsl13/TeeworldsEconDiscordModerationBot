@@ -24,6 +24,8 @@ var (
 	startSpecVoteRegex = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startOptionVote    = regexp.MustCompile(`\[server\]: '([\d]{1,2}):(.*)' voted option '(.+)' reason='(.{1,20})' cmd='(.+)' force=([\d])`)
 
+	// 0: full 1: ID 2: rank
+	loginRconRegex     = regexp.MustCompile(`\[server\]: ClientID=(\d+) authed \((.*)\)`)
 	executeRconCommand = regexp.MustCompile(`\[server\]: ClientID=([\d]{1,2}) rcon='(.*)'$`)
 
 	chatRegex     = regexp.MustCompile(`\[chat\]: ([\d]+):[\d]+:(.{1,16}): (.*)$`)
@@ -309,6 +311,14 @@ func parseEconLine(line string, server *server) (result string, send bool) {
 			result = "**[server]**: Forced No"
 			send = true
 			return
+		}
+
+		matches = loginRconRegex.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			id, _ := strconv.Atoi(matches[1])
+			rank := matches[2]
+
+			result = fmt.Sprintf("**[rcon]**: '%s' authed as **%s**", server.Player(id).Name, rank)
 		}
 
 		matches = executeRconCommand.FindStringSubmatch(line)
