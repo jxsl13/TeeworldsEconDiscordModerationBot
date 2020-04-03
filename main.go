@@ -44,6 +44,9 @@ var (
 
 	forcedYesRegex = regexp.MustCompile(`\[server\]: forcing vote yes$`)
 	forcedNoRegex  = regexp.MustCompile(`\[server\]: forcing vote no$`)
+
+	// context stuff
+	globalCtx, globalCancel = context.WithCancel(context.Background())
 )
 
 func init() {
@@ -57,6 +60,7 @@ func init() {
 		JoinNotify:               newNotifyMap(),
 		DiscordModeratorCommands: newCommandSet(),
 		DiscordCommandQueue:      make(map[address]chan command),
+		AnnouncemenServers:       make(map[address]*AnnouncementServer),
 	}
 
 	env, err := godotenv.Read(".env")
@@ -130,11 +134,12 @@ func init() {
 
 	for idx, addr := range servers {
 		config.EconPasswords[address(addr)] = password(passwords[idx])
-	}
 
-	for _, addr := range servers {
 		config.ServerStates[address(addr)] = newServer()
+
 		config.DiscordCommandQueue[address(addr)] = make(chan command)
+
+		config.AnnouncemenServers[address(addr)] = NewAnnouncementServer(globalCtx, config.DiscordCommandQueue[address(addr)])
 	}
 
 	logLevel, ok := env["LOG_LEVEL"]
@@ -527,10 +532,15 @@ func handleModerate(ctx context.Context, s *discordgo.Session, m *discordgo.Mess
 }
 
 func cleanupRoutine(routineContext context.Context, s *discordgo.Session, channelID, initialMessageID string) {
+	defer log.Println("finished cleaning up old messages.")
+
+	cleanedUpMessages := 0
+
+loop:
 	for {
 		select {
 		case <-routineContext.Done():
-			return
+			break loop
 		default:
 			messages, err := s.ChannelMessages(channelID, 100, initialMessageID, "", "")
 			if err != nil {
@@ -538,24 +548,43 @@ func cleanupRoutine(routineContext context.Context, s *discordgo.Session, channe
 				continue
 			}
 			if len(messages) == 0 {
-				log.Println("finished cleaning up old messages.")
-				return
+				break loop
 			}
-			ids := make([]string, 0, 100)
+			bulkIDs := make([]string, 0, 100)
+			manualIDs := make([]string, 0, 100)
 
+			const bulkDelay = 14*24*time.Hour - time.Minute
 			for _, msg := range messages {
-				ids = append(ids, msg.ID)
+				timestamp, _ := msg.Timestamp.Parse()
+
+				if time.Since(timestamp) >= bulkDelay {
+					bulkIDs = append(bulkIDs, msg.ID)
+				} else {
+					manualIDs = append(manualIDs, msg.ID)
+				}
 			}
 
-			err = s.ChannelMessagesBulkDelete(channelID, ids)
+			err = s.ChannelMessagesBulkDelete(channelID, bulkIDs)
 			if err != nil {
-				log.Printf("error on bulk deleting previous messages: %s", err.Error())
-				return
+				log.Printf("error on bulk deleting old messages: %s", err.Error())
+				if len(manualIDs) == 0 {
+					break loop
+				}
 			}
 
-			log.Printf("deleted %d old messages.", len(messages))
+			for _, id := range manualIDs {
+				err := s.ChannelMessageDelete(channelID, id)
+				if err != nil {
+					log.Printf("error on deleting old message: %s", err.Error())
+					break loop
+				}
+			}
+
+			cleanedUpMessages += len(messages)
 		}
 	}
+
+	log.Printf("deleted %d old messages.", cleanedUpMessages)
 }
 
 func logCleanupRoutine(routineContext context.Context, s *discordgo.Session, channelID, initialMessageID string, addr address) {
@@ -982,8 +1011,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if m.Author.ID == s.State.User.ID {
 			return
@@ -994,7 +1021,7 @@ func main() {
 				return
 			}
 
-			addr, ok := config.ChannelAddress.Get(discordChannel(m.ChannelID))
+			addr, ok := config.GetAddressByChannelID(m.ChannelID)
 			if !ok {
 				log.Printf("Request from invalid channel by user %s", m.Author.String())
 				return
@@ -1050,31 +1077,69 @@ func main() {
 		arguments := strings.Join(args[1:], " ")
 
 		switch commandPrefix {
+		case "announce":
+			as, ok := config.GetAnnouncementServerByChannelID(m.ChannelID)
+			if !ok {
+				break
+			}
+
+			err = as.AddAnnouncement(arguments)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, err.Error())
+				break
+			}
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("registered announcement: %s", arguments))
+
+		case "unannounce":
+			index, err := strconv.Atoi(arguments)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, "invalid id argument")
+				break
+			}
+
+			as, ok := config.GetAnnouncementServerByChannelID(m.ChannelID)
+			if !ok {
+				s.ChannelMessageSend(m.ChannelID, "invalid channel id")
+				break
+			}
+
+			ann, err := as.Delete(index)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, err.Error())
+				break
+			}
+
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Removed: %s %s", ann.Delay.String(), ann.Message))
+
+		case "announcements":
+			as, ok := config.GetAnnouncementServerByChannelID(m.ChannelID)
+			if !ok {
+				break
+			}
+
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Announcements:\n%s", as.String()))
+
 		case "add":
 
 			user := strings.Trim(arguments, " \n")
 			config.DiscordModerators.Add(user)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Added %q to moderators", user))
-			return
 		case "remove":
 			user := strings.Trim(arguments, " \n")
 			config.DiscordModerators.Remove(user)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Removed %q from moderators", user))
-			return
 		case "purge":
 			config.DiscordModerators.Reset()
 			config.DiscordModerators.Add(config.DiscordAdmin)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Purged all moderators except %q", config.DiscordAdmin))
-			return
 		case "clean":
 			handleClean(s, m)
-			return
 		case "moderate":
 			if len(args) < 2 {
 				s.ChannelMessageSend(m.ChannelID, "invalid command")
 				break
 			}
-			handleModerate(ctx, s, m, args)
+			handleModerate(globalCtx, s, m, args)
 		case "spy":
 			nickname := strings.Trim(arguments, " \n")
 			config.SpiedOnPlayers.Add(nickname)
@@ -1086,9 +1151,16 @@ func main() {
 		case "purgespy":
 			config.SpiedOnPlayers.Reset()
 			s.ChannelMessageSend(m.ChannelID, "Purged all spied on players.")
+		case "execute":
+			// send other messages this way
+			addr, ok := config.GetAddressByChannelID(m.ChannelID)
+			if !ok {
+				return
+			}
+
+			config.DiscordCommandQueue[addr] <- command{Author: m.Author.String(), Command: arguments}
 		default:
 			s.ChannelMessageSend(m.ChannelID, "invalid command: "+commandPrefix)
-			return
 		}
 		return
 
@@ -1105,7 +1177,7 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
-	cancel()
+	globalCancel()
 
 	log.Println("Shutting down, please wait...")
 }

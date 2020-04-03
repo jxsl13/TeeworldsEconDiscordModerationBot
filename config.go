@@ -26,6 +26,7 @@ type configuration struct {
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
 	DiscordCommandQueue      map[address]chan command
+	AnnouncemenServers       map[address]*AnnouncementServer
 	LogLevel                 int // 0 : chat & votes & rcon,  1: & whisper, 2: & join & leave
 
 	emojiMu    sync.RWMutex
@@ -53,6 +54,19 @@ func (c *configuration) GetServerByChannelID(channelID string) (*server, bool) {
 		return nil, ok
 	}
 	return server, true
+}
+
+func (c *configuration) GetAnnouncementServerByChannelID(channelID string) (*AnnouncementServer, bool) {
+	addr, ok := c.ChannelAddress.Get(discordChannel(channelID))
+	if !ok {
+		return nil, ok
+	}
+
+	as, ok := c.AnnouncemenServers[addr]
+	if !ok {
+		return nil, ok
+	}
+	return as, true
 }
 
 func (c *configuration) ResetEmojis() {
@@ -115,6 +129,10 @@ func (c *configuration) SetUnbanEmoji(emoji string) {
 func (c *configuration) Close() {
 	for _, c := range c.DiscordCommandQueue {
 		close(c)
+	}
+
+	for _, as := range c.AnnouncemenServers {
+		as.Cancel()
 	}
 }
 

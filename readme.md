@@ -34,10 +34,11 @@ The configuration is done by creating the `.env` configuration file in the curre
 This means that if you call the executable with `./TeeworldsEconDiscordModerationBot`, the `.env` file must be in the same directory as the executable.
 Do you start the bot by using `cd ~/ && ~/TEDMB/./TeeworldsEconDiscordModerationBot`, your configuration file must be located in the home directory `~/`.
 
-Log levels:
--0 :chat, teamchat, votes & rcon  # the recommended log level
--1: 0 & whisper                   # not recommended to eavesdrop on the conversations of others
--2: 1 & join & leave              # this gets spammy
+### Log levels:
+
+- 0: chat, teamchat, votes & rcon - the recommended log level
+- 1 : 0 & whisper                 - not recommended to eavesdrop on the conversations of others
+- 2 : 1 & join & leave            - this gets spammy
 
 ```ini
 
@@ -107,41 +108,63 @@ LOG_LEVEL=0
 Administrator commands start with the prefix `#`.
 They can only be executed by the administrator that has been defined in the `.env` file.
 
-### moderate <IP:Port>
+### \#moderate \<IP:Port>
 
 Starts the moderation of the server that exposes the external console at the address *<IP:Port>*  
 The moderation cannot be stopped by any command.  
 Also this command can only be executed once per server, thus limiting the logging of one Teeworlds server to one Discord channel.  
 
-### add \<DiscordUsername#1234>
+### \#add \<DiscordUsername#1234>
 
 If the administrator of the bot did not add moderators, that are allowed to use the bot, to the moderators list by adding them in the `.env` file, the admin is able to manually add them this way, slowly granting them access to the bot.
 
-### remove \<DiscordUsername#1234>
+### \#remove \<DiscordUsername#1234>
 
 If some moderators should not have any access to the moderation bot, the admin is able to remove staff from the moderators list by executing this command.
 
-### purge
+### \#purge
 
 Remove all moderators from the moderators list except for the admin that has been defined in the `.env`configuration file.
 
-### clean *(Be Careful)*
+### \#clean *(Be Careful)*
 
 Delete all messages that are within the channel.
 Creates a new message in the channel and deletes all messages that are before that newly created message.
 
-### spy \<nickname> *(concider people's privacy)*
+### \#spy \<nickname> *(concider people's privacy)*
 
 If the log level is not being increased in order to see whisper messages, the administrator has the ability to enable spying of whisper messages sent by specific players.
 This should be heavily evaluated before usage, thus the usage is only allowed by the owner/main administrator.
 
-### unspy \<nickname>
+### \#unspy \<nickname>
 
 Stop spying on a specific player's whisper messages.
 
-### purgespy
+### \#purgespy
 
 Remove all spied on players from the spy list.
+
+### \#execute \<rcon command>
+
+This command bypasses any restrictions and can be executed by an administrator only.
+It is possible to execute an command, even those that moderators cannot execute with this administrator command.
+
+### \#announce \<time 5h30m50s bigger 1m> \<announcement msg>
+
+An administrator can control per server announcements.
+Each announcement is added to the server that is currently attached to the Discord channel.
+Announcements are Teeworlds server messages that are being sent via the `say` command.
+Announcement messages are split, in order not to fill multiple lines in an unsightly way.
+Each Teeworlds server message must occupy at most 61 character, thus splitting the message before the word that would exceed 61 character.
+
+### \#announcements
+
+Shows a list of announcement messages that are being sent periodically to the servr that is connected to the current Discord channel.
+The IDs shown here are used to remove theannouncements from the list.
+
+### \#unannouncd \<ID>
+
+Remove the selected ID from the server's announcement list and stop announcing via Teeworlds server messages.
 
 ## Moderator commands
 
@@ -204,11 +227,9 @@ Any reactions that were pressed after that time slot do not do anything.
 
 ## Usage
 
+- create a Discord developer acocunt
 - Start the bot
 - Add your bot to a server/channel
 - execute `#moderate 127.0.0.1:9303` in any channel that the bot has access to. That channel becommes the bot's log channel. Repeated executions of that command will not work, thus forcing you to restart the bot if a new channel should be used as the log channel.
 - the bot tries to hide as much personal info, especially IPs, only in edge cases users see actual IPs.
 - after the bot started, you can use commands like `?help`, `?status`, `?bans` and many more. The first three commands do not execute anything on the Teeworlds server, but this data is being evalued and memorized by the bot to ensure a smaller log size and less stress on the Teeworlds server.
-
-
-  
