@@ -159,10 +159,12 @@ Each Teeworlds server message must occupy at most 61 character, thus splitting t
 
 ### \#announcements
 
+#### TODO: Improve announcement scheduling
+
 Shows a list of announcement messages that are being sent periodically to the servr that is connected to the current Discord channel.
 The IDs shown here are used to remove theannouncements from the list.
 
-### \#unannouncd \<ID>
+### \#unannounce \<ID>
 
 Remove the selected ID from the server's announcement list and stop announcing via Teeworlds server messages.
 
