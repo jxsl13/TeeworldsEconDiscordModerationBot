@@ -138,8 +138,6 @@ func init() {
 		config.ServerStates[address(addr)] = newServer()
 
 		config.DiscordCommandQueue[address(addr)] = make(chan command)
-
-		config.AnnouncemenServers[address(addr)] = NewAnnouncementServer(globalCtx, config.DiscordCommandQueue[address(addr)])
 	}
 
 	logLevel, ok := env["LOG_LEVEL"]
@@ -943,6 +941,8 @@ func serverRoutine(ctx context.Context, s *discordgo.Session, m *discordgo.Messa
 	// sub goroutines
 	routineContext, routineCancel := context.WithCancel(ctx)
 	defer routineCancel()
+
+	config.AnnouncemenServers[addr] = NewAnnouncementServer(routineContext, config.DiscordCommandQueue[addr])
 
 	// econ connection
 	conn, err := econ.DialTo(string(addr), string(pass))

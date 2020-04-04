@@ -14,8 +14,14 @@ const (
 	serverMessageWidth = 64 - 3
 )
 
+// Announcement represents an announcement
+type Announcement struct {
+	Delay   time.Duration
+	Message string
+}
+
 // NewAnnouncement creates a new announcement and starts its goroutine
-func NewAnnouncement(ctx context.Context, cmdQueue chan<- command, line string) (*Announcement, error) {
+func NewAnnouncement(line string) (*Announcement, error) {
 	var announcement Announcement
 
 	err := announcement.parse(line)
@@ -23,17 +29,7 @@ func NewAnnouncement(ctx context.Context, cmdQueue chan<- command, line string) 
 		return nil, err
 	}
 
-	announcement.addContext(ctx)
-	go announcement.start(cmdQueue)
 	return &announcement, nil
-}
-
-// Announcement represents an announcement
-type Announcement struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	Delay   time.Duration
-	Message string
 }
 
 // Parse fills the Announcement with
@@ -57,15 +53,6 @@ func (a *Announcement) parse(line string) error {
 	a.Message = strings.TrimSpace(substrings[1])
 
 	return nil
-}
-
-// addContext adds a context to the server.
-func (a *Announcement) addContext(ctx context.Context) {
-	if a.ctx != nil && a.cancel != nil {
-		a.cancel()
-	}
-
-	a.ctx, a.cancel = context.WithCancel(ctx)
 }
 
 func sendText(cmdQueue chan<- command, text string) {
@@ -99,28 +86,6 @@ func sendText(cmdQueue chan<- command, text string) {
 			Command: fmt.Sprintf("say %s", strings.TrimSpace(strings.Join(buffer, " "))),
 		}
 	}
-
-}
-
-func (a *Announcement) start(cmdQueue chan<- command) {
-	defer log.Printf("closed announcement routine (%s): %s", a.Delay.String(), a.Message)
-
-	ticker := time.Tick(a.Delay)
-	for {
-		select {
-		case <-a.ctx.Done():
-			return
-		case <-ticker:
-			sendText(cmdQueue, a.Message)
-		}
-	}
-}
-
-// Cancel aborts the announcement routine.
-func (a *Announcement) Cancel() {
-	if a.cancel != nil {
-		a.cancel()
-	}
 }
 
 // AnnouncementServer handles per server announcements
@@ -137,22 +102,63 @@ func NewAnnouncementServer(ctx context.Context, cmd chan<- command) *Announcemen
 	as.announcements = make([]*Announcement, 0, 1)
 	as.commandQueue = cmd
 	as.ctx = ctx
+
+	go as.start()
+
 	return &as
+}
+
+// Size returns the number of registered announcements
+func (as *AnnouncementServer) Size() int {
+	as.Lock()
+	defer as.Unlock()
+
+	return len(as.announcements)
+}
+
+func (as *AnnouncementServer) start() {
+	defer log.Println("Closing announcement routine.")
+
+	ticker := time.NewTicker(time.Minute)
+	current := -1
+
+	for {
+		select {
+		case <-as.ctx.Done():
+			return
+		case <-ticker.C:
+			size := as.Size()
+
+			if size == 0 {
+				continue
+			}
+			ticker.Stop()
+
+			current = (current + 1) % size
+
+			ann, err := as.Get(current)
+			if err != nil {
+				log.Printf("error in announcement routine: %s", err.Error())
+				return
+			}
+
+			ticker = time.NewTicker(ann.Delay)
+			sendText(as.commandQueue, ann.Message)
+		}
+	}
 }
 
 // AddAnnouncement adds a new announcement from line.
 func (as *AnnouncementServer) AddAnnouncement(line string) error {
 
-	announcement, err := NewAnnouncement(as.ctx, as.commandQueue, line)
+	announcement, err := NewAnnouncement(line)
 	if err != nil {
 		return err
 	}
-
 	as.Lock()
 	defer as.Unlock()
 
 	as.announcements = append(as.announcements, announcement)
-
 	return nil
 }
 
@@ -184,9 +190,7 @@ func (as *AnnouncementServer) Delete(index int) (Announcement, error) {
 		return Announcement{}, errors.New("invalid announcement index")
 	}
 
-	// cancel announcement routine
 	a := as.announcements[index]
-	a.Cancel()
 
 	// create copy without cancel & context
 	copy := Announcement{
@@ -196,18 +200,6 @@ func (as *AnnouncementServer) Delete(index int) (Announcement, error) {
 
 	as.announcements = append(as.announcements[:index], as.announcements[index+1:]...)
 	return copy, nil
-}
-
-// Cancel quits all announcement routines.
-func (as *AnnouncementServer) Cancel() {
-	as.Lock()
-	defer as.Unlock()
-
-	for _, ann := range as.announcements {
-		ann.Cancel()
-	}
-
-	as.announcements = nil
 }
 
 func (as *AnnouncementServer) String() string {

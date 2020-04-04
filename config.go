@@ -130,10 +130,6 @@ func (c *configuration) Close() {
 	for _, c := range c.DiscordCommandQueue {
 		close(c)
 	}
-
-	for _, as := range c.AnnouncemenServers {
-		as.Cancel()
-	}
 }
 
 func (c *configuration) String() string {
