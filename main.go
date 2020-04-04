@@ -724,7 +724,7 @@ func handleMessageReactions(routineContext context.Context, s *discordgo.Session
 		nickname := matches[1]
 		reason := matches[3]
 
-		addr, ok := config.ChannelAddress.Get(discordChannel(msg.ChannelID))
+		addr, ok := config.GetAddressByChannelID(msg.ChannelID)
 		if !ok {
 			return
 		}

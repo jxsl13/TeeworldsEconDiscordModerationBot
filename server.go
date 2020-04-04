@@ -77,7 +77,7 @@ func (p *player) Clear() {
 }
 
 type server struct {
-	mu              sync.RWMutex // guards slots object
+	sync.RWMutex    // guards slots object
 	players         [64]player
 	lastReadyPlayer int // the last mentioned ready player gets a new nickname
 	BanServer       banServer
@@ -88,7 +88,9 @@ func newServer() *server {
 		BanServer: newBanServer(),
 	}
 	for idx := range srv.players {
+		srv.Lock()
 		srv.players[idx].ID = idx
+		srv.Unlock()
 	}
 	return srv
 }
@@ -104,8 +106,10 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 		match = playerGetNameRegex.FindStringSubmatch(line)
 		if len(match) == 2 {
 			name := match[1]
+			s.Lock()
 			s.players[s.lastReadyPlayer].Name = name
 			s.players[s.lastReadyPlayer].State = stateNamed
+			s.Unlock()
 			return true, ""
 		}
 
@@ -116,8 +120,11 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			ip := match[2]
 			s.lastReadyPlayer = id
 
+			s.Lock()
 			s.players[id].Address = address(ip)
 			s.players[id].State = stateReadyNameless
+			s.Unlock()
+
 			return true, ""
 		}
 
@@ -125,13 +132,17 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 		match = playerEnteredRegex.FindStringSubmatch(line)
 		if len(match) == 3 {
 			id, _ := strconv.Atoi(match[1])
+
+			s.Lock()
 			s.players[id].State = stateIngame
+			name := s.players[id].Name
+			s.Unlock()
 
 			// notification requested
 			if notify != nil {
 				var sb strings.Builder
 
-				mentions := notify.Tracked(s.players[id].Name)
+				mentions := notify.Tracked(name)
 				if len(mentions) > 0 {
 
 					for idx, mention := range mentions {
@@ -141,13 +152,13 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 						}
 					}
 
-					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", s.players[id].Name, id, sb.String())
+					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", name, id, sb.String())
 				}
 
 			}
 
 			if config.LogLevel >= 2 {
-				return true, fmt.Sprintf("[server]: '%s' joined the server with id %d", s.players[id].Name, id)
+				return true, fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
 			}
 
 			return true, ""
@@ -158,10 +169,13 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 		if len(match) == 4 {
 			id, _ := strconv.Atoi(match[1])
 
+			s.Lock()
 			s.players[id].State = stateEmpty
+			name := s.players[id].Name
+			s.Unlock()
 
 			if config.LogLevel >= 2 {
-				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", s.players[id].Name, id)
+				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
 			}
 		}
 	} else if strings.Contains(line, "[net_ban]") {
@@ -251,16 +265,16 @@ func (s *server) Player(id int) player {
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
 	return s.players[id]
 }
 
 // PlayerByIP returns a dummy player with a negative ID if no player with expected IP was found.
 func (s *server) PlayerByIP(ip address) player {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
 	for _, p := range s.players {
 		if p.Online() && p.Address == ip {
@@ -279,8 +293,8 @@ func (s *server) PlayerByIP(ip address) player {
 func (s *server) Status() []player {
 	playerList := make([]player, 0, 32)
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.RLock()
+	defer s.RUnlock()
 
 	for _, p := range s.players {
 		if p.Online() {
