@@ -81,17 +81,25 @@ type server struct {
 	players         [64]player
 	lastReadyPlayer int // the last mentioned ready player gets a new nickname
 	BanServer       banServer
+	JoinCallbacks   []playerCallback
+	LeaveCallbacks  []playerCallback
 }
+
+type playerCallback func(player)
 
 func newServer() *server {
 	srv := &server{
-		BanServer: newBanServer(),
+		BanServer:      newBanServer(),
+		JoinCallbacks:  make([]playerCallback, 0, 1),
+		LeaveCallbacks: make([]playerCallback, 0, 1),
 	}
+
 	for idx := range srv.players {
 		srv.Lock()
 		srv.players[idx].ID = idx
 		srv.Unlock()
 	}
+
 	return srv
 }
 
@@ -135,14 +143,16 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 			s.Lock()
 			s.players[id].State = stateIngame
-			name := s.players[id].Name
+			player := s.players[id]
 			s.Unlock()
+
+			s.handleJoin(player)
 
 			// notification requested
 			if notify != nil {
 				var sb strings.Builder
 
-				mentions := notify.Tracked(name)
+				mentions := notify.Tracked(player.Name)
 				if len(mentions) > 0 {
 
 					for idx, mention := range mentions {
@@ -152,13 +162,13 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 						}
 					}
 
-					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", name, id, sb.String())
+					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", player.Name, id, sb.String())
 				}
 
 			}
 
 			if config.LogLevel >= 2 {
-				return true, fmt.Sprintf("[server]: '%s' joined the server with id %d", name, id)
+				return true, fmt.Sprintf("[server]: '%s' joined the server with id %d", player.Name, id)
 			}
 
 			return true, ""
@@ -171,11 +181,13 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 			s.Lock()
 			s.players[id].State = stateEmpty
-			name := s.players[id].Name
+			player := s.players[id]
 			s.Unlock()
 
+			s.handleLeave(player)
+
 			if config.LogLevel >= 2 {
-				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", name, id)
+				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", player.Name, id)
 			}
 		}
 	} else if strings.Contains(line, "[net_ban]") {
@@ -303,4 +315,24 @@ func (s *server) Status() []player {
 	}
 
 	return playerList
+}
+
+func (s *server) AddJoinHandler(handler playerCallback) {
+	s.JoinCallbacks = append(s.JoinCallbacks, handler)
+}
+
+func (s *server) AddLeaveHandler(handler playerCallback) {
+	s.LeaveCallbacks = append(s.LeaveCallbacks, handler)
+}
+
+func (s *server) handleJoin(p player) {
+	for _, cb := range s.JoinCallbacks {
+		go cb(p)
+	}
+}
+
+func (s *server) handleLeave(p player) {
+	for _, cb := range s.LeaveCallbacks {
+		go cb(p)
+	}
 }

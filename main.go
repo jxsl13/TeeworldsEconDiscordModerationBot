@@ -135,7 +135,12 @@ func init() {
 	for idx, addr := range servers {
 		config.EconPasswords[address(addr)] = password(passwords[idx])
 
-		config.ServerStates[address(addr)] = newServer()
+		srv := newServer()
+		config.ServerStates[address(addr)] = srv
+
+		srv.AddJoinHandler(func(p player) {
+			config.NicknameTracker.Add(p)
+		})
 
 		config.DiscordCommandQueue[address(addr)] = make(chan command)
 	}
@@ -206,6 +211,50 @@ func init() {
 		log.Println("Expected emoji has the format UNBAN_EMOJI: <:sendhelp:529812377441402881> -> sendhelp:529812377441402881")
 	} else {
 		config.SetUnbanEmoji("❎")
+	}
+
+	trackNicks, _ := env["NICKNAME_TRACKING"]
+	areNicksTracked := false
+	switch strings.ToLower(trackNicks) {
+	case "":
+		fallthrough
+	case "0":
+		fallthrough
+	case "false":
+		fallthrough
+	case "disable":
+		fallthrough
+	case "disabled":
+		areNicksTracked = false
+	default:
+		areNicksTracked = true
+	}
+
+	if areNicksTracked {
+		redisAddress, ok := env["REDIS_ADDRESS"]
+		if !ok {
+			redisAddress = "localhost:6379"
+		}
+
+		redisPassword, _ := env["REDIS_PASSWORD"]
+
+		expirationString, ok := env["NICKNAME_EXPIRATION"]
+		if !ok {
+			expirationString = "336h"
+		}
+
+		expirationDelay, err := time.ParseDuration(expirationString)
+		if err != nil {
+			expirationDelay = 336 * time.Hour
+		}
+
+		tracker, err := NewNicknameTracker(redisAddress, redisPassword, expirationDelay)
+		if err != nil {
+			log.Println(err)
+		}
+
+		config.NicknameTracker = tracker
+
 	}
 
 	log.Printf("\n%s", config.String())
@@ -1077,6 +1126,50 @@ func main() {
 		arguments := strings.Join(args[1:], " ")
 
 		switch commandPrefix {
+		case "whois":
+			nickname := strings.TrimSpace(arguments)
+			if config.NicknameTracker == nil {
+				s.ChannelMessageSend(m.ChannelID, "nickname tracking is disabled.")
+				return
+			}
+
+			nicknames, err := config.NicknameTracker.WhoIs(nickname)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, err.Error())
+				return
+			}
+
+			var sb strings.Builder
+			sb.WriteString("**Known nicknames**:\n```\n")
+			for _, nick := range nicknames {
+				sb.WriteString(nick)
+				sb.WriteString("\n")
+			}
+			sb.WriteString("```\n")
+			s.ChannelMessageSend(m.ChannelID, sb.String())
+
+		case "ips":
+			nickname := strings.TrimSpace(arguments)
+			if config.NicknameTracker == nil {
+				s.ChannelMessageSend(m.ChannelID, "nickname tracking is disabled.")
+				return
+			}
+
+			ips, err := config.NicknameTracker.IPs(nickname)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, err.Error())
+				return
+			}
+
+			var sb strings.Builder
+			sb.WriteString("**Known IPs**:\n```\n")
+			for _, ip := range ips {
+				sb.WriteString(ip)
+				sb.WriteString("\n")
+			}
+			sb.WriteString("```\n")
+			s.ChannelMessageSend(m.ChannelID, sb.String())
+
 		case "announce":
 			as, ok := config.GetAnnouncementServerByChannelID(m.ChannelID)
 			if !ok {

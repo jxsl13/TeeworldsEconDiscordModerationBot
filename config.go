@@ -37,6 +37,8 @@ type configuration struct {
 
 	BanReplacementIDCommand string // format string
 	BanReplacementIPCommand string // format string
+
+	NicknameTracker *NicknameTracker
 }
 
 func (c *configuration) GetAddressByChannelID(channelID string) (address, bool) {
@@ -169,6 +171,14 @@ func (c *configuration) String() string {
 	for _, cmd := range c.DiscordModeratorCommands.Commands() {
 		sb.WriteString(fmt.Sprintf("\t%s\n", cmd))
 	}
+	sb.WriteString("\n")
+
+	sb.WriteString("Nickname Tracking: ")
+	nickTrack := "enabled"
+	if c.NicknameTracker == nil {
+		nickTrack = "disabled"
+	}
+	sb.WriteString(nickTrack)
 	sb.WriteString("\n")
 
 	sb.WriteString(fmt.Sprintf("LogLevel: %d\n", c.LogLevel))

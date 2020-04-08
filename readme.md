@@ -99,6 +99,25 @@ ECON_ADDRESSES=127.0.0.1:9303 127.0.0.1:9304 localhost:9305
 # one password without any whitespace for each individual server.
 ECON_PASSWORDS=abcdefghijklsgxdhgcfjhvgkjbhk.nrdxjcfhkjn
 
+# leave empty or set to 0, disable, false to disable this feature
+# in order to keep track of specific troublemakers, their nicknames and their IPs,
+# you can utilize a redis database that saves these associations for a limited period of time.
+# this feature is accurate with unique nicknames.
+# do not trust the full list, as it might contain incorrect associations, as nicknames can easily be shared.
+# in order to get the best result, it is best to request for rather UNIQUE nicknames.
+# assuming MisterXYZ@Test uses undercover nicknames like nameless tee, it is best to request for 
+# MisterXYZ@Test's associated nicknames and not the other way around.
+NICKNAME_TRACKING=ENABLE
+
+# time, until IPs and Nicknames expire
+NICKNAME_EXPIRATION=336h
+
+# address of the redis cache
+REDIS_ADDRESS=localhost:6379
+
+#pass of the cache, by default there is no password, as redis is used locally only.
+REDIS_PASSWORD=
+
 # the recommended logging level.
 LOG_LEVEL=0
 ```
@@ -159,14 +178,24 @@ Each Teeworlds server message must occupy at most 61 character, thus splitting t
 
 ### \#announcements
 
-#### TODO: Improve announcement scheduling
-
 Shows a list of announcement messages that are being sent periodically to the servr that is connected to the current Discord channel.
 The IDs shown here are used to remove theannouncements from the list.
 
 ### \#unannounce \<ID>
 
 Remove the selected ID from the server's announcement list and stop announcing via Teeworlds server messages.
+
+### \#whois \<UNIQUE nickname>
+
+Request for nicknames that have been sharing their IPs with the requested nickname.
+The more unique the requested nickname is, the better the results are, especially when nobody else shares that nickname or fakes it.
+This is usually the case, when a player uses undercover nicknames, but it can also be the case when multiple players, especially siblings share the same network.
+
+### \#ips \<UNIQUE nickname>
+
+Request a list of unique IPs that the nickname has been seen on the moderated servers.
+The more unique the nickname is, the more accurate the resulting list will be.
+This means, the smaller the chance that a nickname is used by multiple users, the higher the accuracy of the IP list.
 
 ## Moderator commands
 
