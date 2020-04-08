@@ -180,8 +180,11 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			id, _ := strconv.Atoi(match[1])
 
 			s.Lock()
-			s.players[id].State = stateEmpty
+			// make copy
 			player := s.players[id]
+
+			// clear player slot
+			s.players[id].Clear()
 			s.Unlock()
 
 			s.handleLeave(player)
