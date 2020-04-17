@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"sync"
 )
 
@@ -13,6 +14,19 @@ type channelAddressMap struct {
 
 func newChannelAddressMap() channelAddressMap {
 	return channelAddressMap{m: make(map[discordChannel]address)}
+}
+
+func (a *channelAddressMap) GetAddresses() []address {
+	a.mu.Lock()
+	result := make([]address, 0, len(a.m))
+
+	for _, addr := range a.m {
+		result = append(result, addr)
+	}
+	a.mu.Unlock()
+
+	sort.Sort(byAddress(result))
+	return result
 }
 
 func (a *channelAddressMap) Set(channelID discordChannel, addr address) {

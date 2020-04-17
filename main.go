@@ -110,6 +110,8 @@ func init() {
 	config.DiscordModeratorCommands.Add("help")
 	config.DiscordModeratorCommands.Add("status")
 	config.DiscordModeratorCommands.Add("bans")
+	config.DiscordModeratorCommands.Add("multiban")
+	config.DiscordModeratorCommands.Add("multiunban")
 	config.DiscordModeratorCommands.Add("notify")
 	config.DiscordModeratorCommands.Add("unnotify")
 
@@ -538,6 +540,61 @@ func handleBans(s *discordgo.Session, m *discordgo.MessageCreate, addr address) 
 	msg := fmt.Sprintf("[banlist]: %d ban(s)\n```%s```\n", numBans, config.ServerStates[addr].BanServer.String())
 	s.ChannelMessageSend(m.ChannelID, msg)
 	return
+}
+
+func handleMultiBan(s *discordgo.Session, m *discordgo.MessageCreate, id, minutes int, reason string) {
+	server, ok := config.GetServerByChannelID(m.ChannelID)
+	if !ok {
+		log.Printf("requested multiban from invalid channel by: %s", m.Author.String())
+		return
+	}
+
+	player := server.Player(id)
+	ip := player.Address
+
+	cmd := command{
+		Author:  m.Author.String(),
+		Command: fmt.Sprintf("ban %s %d %s", ip, minutes, reason),
+	}
+
+	for _, queue := range config.GetCommandQueues() {
+		queue <- cmd
+	}
+
+	// set player nickname on all servers
+	for _, server := range config.GetServers() {
+
+		for retries := 0; retries < 10; retries++ {
+			time.Sleep(time.Second)
+
+			if ok := server.BanServer.SetPlayerAfterwards(player); ok {
+				break
+			}
+		}
+	}
+
+}
+
+func handleMultiUnban(s *discordgo.Session, m *discordgo.MessageCreate, id int) {
+	server, ok := config.GetServerByChannelID(m.ChannelID)
+	if !ok {
+		log.Printf("requested multiunban from invalid channel by: %s", m.Author.String())
+		return
+	}
+
+	ban, err := server.BanServer.GetBan(id)
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**[error]**: %s", err.Error()))
+		return
+	}
+
+	for _, cmdQueue := range config.GetCommandQueues() {
+		cmdQueue <- command{
+			Author:  m.Author.String(),
+			Command: fmt.Sprintf("unban %s", ban.Player.Address),
+		}
+	}
+
 }
 
 func handleNotify(s *discordgo.Session, m *discordgo.MessageCreate, nickname string) {
@@ -1094,6 +1151,27 @@ func main() {
 				handleStatus(s, m, addr)
 			case "bans":
 				handleBans(s, m, addr)
+			case "multiban":
+				id, err := strconv.Atoi(cmdTokens[1])
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "**[error]**: invalid user ID")
+					return
+				}
+				minutes, err := strconv.Atoi(cmdTokens[2])
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "**[error]**: invalid minutes argument, please enter an integer.")
+					return
+				}
+				reason := strings.Join(cmdTokens[3:], " ")
+				handleMultiBan(s, m, id, minutes, reason)
+			case "multiunban":
+				id, err := strconv.Atoi(cmdTokens[1])
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "**[error]**: invalid ban ID")
+					return
+				}
+				handleMultiUnban(s, m, id)
+
 			case "notify":
 				argsLine := strings.Join(cmdTokens[1:], " ")
 				handleNotify(s, m, strings.TrimSpace(argsLine))

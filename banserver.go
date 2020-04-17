@@ -31,6 +31,19 @@ type banServer struct {
 	BanList []ban
 }
 
+func (b *banServer) GetIDFrom(ip address) (id int, ok bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for idx, currBan := range b.BanList {
+		if currBan.Player.Address == ip {
+			return idx, true
+		}
+	}
+
+	return 0, false
+}
+
 func (b *banServer) Ban(p player, duration time.Duration, reason string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -53,6 +66,17 @@ func (b *banServer) Ban(p player, duration time.Duration, reason string) {
 		ExpiresAt: time.Now().Add(duration),
 		Reason:    reason,
 	})
+}
+
+func (b *banServer) GetBan(id int) (foundBan ban, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if id < 0 || len(b.BanList) <= id {
+		return ban{}, ErrInvalidIndex
+	}
+
+	return b.BanList[id], nil
 }
 
 func (b *banServer) GetBanByNameAndReason(name, reason string) (bb ban, ok bool) {
@@ -113,6 +137,13 @@ func (b *banServer) UnbanIndex(index int) (ban, error) {
 	ban := b.BanList[index]
 	b.BanList = append(b.BanList[:index], b.BanList[index+1:]...)
 	return ban, nil
+}
+
+func (b *banServer) UnbanAll() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.BanList = b.BanList[:0]
 }
 
 func (b *banServer) Bans() []ban {

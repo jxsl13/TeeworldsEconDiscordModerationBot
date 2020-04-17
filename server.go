@@ -44,6 +44,7 @@ var (
 	banRemoveIndexRegex = regexp.MustCompile(`\[net_ban\]: unbanned index [\d]+ \('(.+)'\)`)
 	banRemoveIPRegex    = regexp.MustCompile(`\[net_ban\]: unbanned '(.+)'`)
 	banExpiredRegex     = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
+	banRemoveAll        = regexp.MustCompile(`\[net_ban\]: unbanned all entries$`)
 )
 
 const (
@@ -263,6 +264,12 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 				return true, fmt.Sprintf("[bans]: unbanned '%s'", ban.Player.Name)
 			}
 			return true, fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
+		}
+
+		matches = banRemoveAll.FindStringSubmatch(line)
+		if len(matches) == 1 {
+			s.BanServer.UnbanAll()
+			return true, fmt.Sprintf("[bans]: unbanned all players.")
 		}
 
 	}

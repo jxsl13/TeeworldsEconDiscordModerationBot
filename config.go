@@ -41,6 +41,29 @@ type configuration struct {
 	NicknameTracker *NicknameTracker
 }
 
+func (c *configuration) GetCommandQueues() []chan command {
+	addresses := c.ChannelAddress.GetAddresses()
+
+	cmdQueues := make([]chan command, 0, len(addresses))
+
+	for _, addr := range addresses {
+		cmdQueues = append(cmdQueues, c.DiscordCommandQueue[addr])
+	}
+
+	return cmdQueues
+}
+
+func (c *configuration) GetServers() []*server {
+	addresses := c.ChannelAddress.GetAddresses()
+
+	servers := make([]*server, 0, len(addresses))
+
+	for _, addr := range addresses {
+		servers = append(servers, c.ServerStates[addr])
+	}
+	return servers
+}
+
 func (c *configuration) GetAddressByChannelID(channelID string) (address, bool) {
 	return c.ChannelAddress.Get(discordChannel(channelID))
 }

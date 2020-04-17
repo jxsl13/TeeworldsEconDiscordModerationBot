@@ -167,6 +167,8 @@ Remove all spied on players from the spy list.
 
 This command bypasses any restrictions and can be executed by an administrator only.
 It is possible to execute an command, even those that moderators cannot execute with this administrator command.
+This allows the administrator to change server settings on the fly, without having to configure any specific permissions.
+Handy when multiple servers with different server mods are being hosted.
 
 ### \#announce \<time 5h30m50s bigger 1m> \<announcement msg>
 
@@ -222,6 +224,16 @@ Examples:
 
 # remove all notifications.
 ?unnotify
+
+# multiban bans a specific player on all moderated servers
+# firstly you would have to execute ?status in order to get a player's ID
+?multiban <ID> <minutes> <reason>
+
+# multiunban removes a specific ban from all moderated servers, if there is such a ban.
+# in order to unban a specific player, you need to execute ?bans and remember the <BAN_ID>
+# it's necessary to use the ?bans command and the ?multiunban command in the same channel
+?multiunban <BAN_ID>
+
 
 ```
 
