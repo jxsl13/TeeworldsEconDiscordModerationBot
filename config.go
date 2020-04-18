@@ -19,7 +19,6 @@ type command struct {
 type configuration struct {
 	EconPasswords            map[Address]password
 	ServerStates             map[Address]*server
-	MentionLimiter           map[Address]*RateLimiter
 	ChannelAddress           ChannelAddressMap
 	DiscordToken             string
 	DiscordAdmin             string
@@ -28,6 +27,7 @@ type configuration struct {
 	JoinNotify               *NotifyMap
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
+	MentionLimiter           map[Address]*RateLimiter
 	DiscordCommandQueue      map[Address]chan command
 	AnnouncemenServers       map[Address]*AnnouncementServer
 	LogLevel                 int // 0 : chat & votes & rcon,  1: & whisper, 2: & join & leave

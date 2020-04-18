@@ -15,7 +15,8 @@ type RateLimiter struct {
 // NewRateLimiter creates a new Ratelimiter
 func NewRateLimiter(delay time.Duration) *RateLimiter {
 	return &RateLimiter{
-		delay: delay,
+		delay:      delay,
+		lastAccess: time.Now().Add(-1 * delay),
 	}
 }
 
