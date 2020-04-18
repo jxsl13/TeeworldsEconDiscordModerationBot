@@ -594,6 +594,14 @@ func replaceModeratorMentions(s *discordgo.Session, m *discordgo.MessageCreate, 
 
 	// rate limit mentions
 	if !config.AllowMention(m.ChannelID) {
+
+		// if mentions in cooldown, make mention bold formated
+		matches := moderatorMentions.FindStringSubmatch(line)
+		if len(matches) == (1 + 1) {
+			mention := matches[1]
+			return strings.ReplaceAll(line, mention, fmt.Sprintf("**%s**", mention))
+		}
+
 		// don't replace anything
 		return line
 	}
