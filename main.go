@@ -36,7 +36,7 @@ var (
 
 	mutesAndVotebansRegex = regexp.MustCompile(`\[Server\]: (.*)`)
 
-	moderatorMentions = regexp.MustCompile(`\[chat\]: .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*`) // first plurals, then singular
+	moderatorMentions = regexp.MustCompile(`\[chat\]: [\d]+:'.*': .*(@moderators|@mods|@mod|@administrators|@admins|@admin).*$`) // first plurals, then singular
 
 	formatedSpecVoteKickStringRegex = regexp.MustCompile(`\*\*\[.*vote.*\]\*\*\: ([\d]+):'(.{0,20})' [^\d]{12,15} ([\d]+):'(.{0,20})'( to spectators)? with reason '(.+)'$`)
 
