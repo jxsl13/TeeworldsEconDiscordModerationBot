@@ -59,7 +59,7 @@ type player struct {
 	Name    string
 	Clan    string
 	ID      int
-	Address address
+	Address Address
 	State   int
 }
 
@@ -130,7 +130,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			s.lastReadyPlayer = id
 
 			s.Lock()
-			s.players[id].Address = address(ip)
+			s.players[id].Address = Address(ip)
 			s.players[id].State = stateReadyNameless
 			s.Unlock()
 
@@ -199,7 +199,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 		matches = banAddRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 3) {
-			ip := address(matches[1])
+			ip := Address(matches[1])
 			minutes, _ := strconv.Atoi(matches[2])
 			reason := matches[3]
 
@@ -215,7 +215,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 		matches = banAddIPRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 3) {
-			ip := address(matches[1])
+			ip := Address(matches[1])
 			minutes, _ := strconv.Atoi(matches[2])
 			reason := matches[3]
 
@@ -230,7 +230,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 		matches = banExpiredRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 1) {
-			ip := address(matches[1])
+			ip := Address(matches[1])
 
 			ban, err := s.BanServer.UnbanIP(ip)
 
@@ -243,7 +243,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 		matches = banRemoveIndexRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 1) {
-			ip := address(matches[1])
+			ip := Address(matches[1])
 
 			ban, err := s.BanServer.UnbanIP(ip)
 
@@ -256,7 +256,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 		matches = banRemoveIPRegex.FindStringSubmatch(line)
 		if len(matches) == (1 + 1) {
-			ip := address(matches[1])
+			ip := Address(matches[1])
 
 			ban, err := s.BanServer.UnbanIP(ip)
 
@@ -294,7 +294,7 @@ func (s *server) Player(id int) player {
 }
 
 // PlayerByIP returns a dummy player with a negative ID if no player with expected IP was found.
-func (s *server) PlayerByIP(ip address) player {
+func (s *server) PlayerByIP(ip Address) player {
 	s.Lock()
 	defer s.Unlock()
 

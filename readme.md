@@ -60,6 +60,9 @@ DISCORD_MODERATORS="nickname2#2345 nickname3#3456"
 # this is the group that is pinged, when someone writes @mods, @mod, @admins, etc.
 DISCORD_MODERATOR_ROLE="Server Moderator"
 
+# use 2h5m20s/2h/5m20s/120s format to limit recurring mentions in the discord channels.
+MODERATOR_MENTION_DELAY=5m
+
 # this is a list of commands that can be used by moderators from the discord logging channels.
 DISCORD_MODERATOR_COMMANDS="status vote say mute unmute mutes voteban unvoteban unvoteban_client votebans ban unban bans set_team"
 
@@ -89,7 +92,7 @@ BANIP_REPLACEMENT_COMMAND="ban {IP} 60 violation of rules"
 
 # this is the list of possible servers that can be moderated.
 # if the moderation bot is run on the same server as the Teeworlds servers,
-# it is possible to use addresses like `localhost:9305` instead of passing the actual IP
+# it is possible to use Addresses like `localhost:9305` instead of passing the actual IP
 # like `127.0.0.1:9305`
 # Is the bot run from a different server, the external IPs of the Teeworlds servers are needed with their
 # corresponding econ ports.
@@ -110,7 +113,7 @@ ECON_PASSWORDS=abcdefghijklsgxdhgcfjhvgkjbhk.nrdxjcfhkjn
 NICKNAME_TRACKING=ENABLE
 
 # time, until IPs and Nicknames expire
-NICKNAME_EXPIRATION=336h
+NICKNAME_EXPIRATION=120h
 
 # address of the redis cache
 REDIS_ADDRESS=localhost:6379

@@ -7,7 +7,9 @@ import (
 )
 
 type password string
-type address string
+
+// Address used for ips:port of servers
+type Address string
 
 type command struct {
 	Author  string
@@ -15,9 +17,10 @@ type command struct {
 }
 
 type configuration struct {
-	EconPasswords            map[address]password
-	ServerStates             map[address]*server
-	ChannelAddress           channelAddressMap
+	EconPasswords            map[Address]password
+	ServerStates             map[Address]*server
+	MentionLimiter           map[Address]*RateLimiter
+	ChannelAddress           ChannelAddressMap
 	DiscordToken             string
 	DiscordAdmin             string
 	DiscordModerators        userSet
@@ -25,8 +28,8 @@ type configuration struct {
 	JoinNotify               *NotifyMap
 	DiscordModeratorCommands commandSet
 	DiscordModeratorRole     string
-	DiscordCommandQueue      map[address]chan command
-	AnnouncemenServers       map[address]*AnnouncementServer
+	DiscordCommandQueue      map[Address]chan command
+	AnnouncemenServers       map[Address]*AnnouncementServer
 	LogLevel                 int // 0 : chat & votes & rcon,  1: & whisper, 2: & join & leave
 
 	emojiMu    sync.RWMutex
@@ -64,7 +67,7 @@ func (c *configuration) GetServers() []*server {
 	return servers
 }
 
-func (c *configuration) GetAddressByChannelID(channelID string) (address, bool) {
+func (c *configuration) GetAddressByChannelID(channelID string) (Address, bool) {
 	return c.ChannelAddress.Get(discordChannel(channelID))
 }
 
@@ -92,6 +95,21 @@ func (c *configuration) GetAnnouncementServerByChannelID(channelID string) (*Ann
 		return nil, ok
 	}
 	return as, true
+}
+
+func (c *configuration) AllowMention(channelID string) (allow bool) {
+	addr, ok := c.ChannelAddress.Get(discordChannel(channelID))
+	if !ok {
+		return false
+	}
+
+	ml, ok := c.MentionLimiter[addr]
+	if !ok {
+		return false
+	}
+
+	return ml.Allow()
+
 }
 
 func (c *configuration) ResetEmojis() {

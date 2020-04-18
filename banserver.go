@@ -31,7 +31,7 @@ type banServer struct {
 	BanList []ban
 }
 
-func (b *banServer) GetIDFrom(ip address) (id int, ok bool) {
+func (b *banServer) GetIDFrom(ip Address) (id int, ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -105,7 +105,7 @@ func (b *banServer) SetPlayerAfterwards(p player) (ok bool) {
 	return false
 }
 
-func (b *banServer) UnbanIP(ip address) (ban, error) {
+func (b *banServer) UnbanIP(ip Address) (ban, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
