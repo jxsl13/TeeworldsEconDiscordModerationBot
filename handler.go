@@ -59,7 +59,7 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 		UnnotifyHandler(s, m, author, args)
 	default:
 		// send other messages this way
-		config.DiscordCommandQueue[addr] <- command{Author: author, Command: cmd}
+		config.DiscordCommandQueue[addr] <- command{Author: author, Command: fmt.Sprintf("%s %s", cmd, args)}
 	}
 	return
 }
