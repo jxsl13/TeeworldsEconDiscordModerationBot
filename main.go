@@ -260,42 +260,54 @@ func main() {
 			return
 		}
 
+		// author stays the same
 		author := m.Author.String()
-		prefix := ""
-		command := ""
-		args := ""
 
-		if len(m.Content) >= 1 {
-			prefix = m.Content[:1]
-		}
+		// each new line might contain a command
+		lines := strings.Split(m.Content, "\n")
 
-		if len(m.Content) >= 2 {
-			strs := strings.SplitN(m.Content[1:], " ", 2)
+		// try to execute each command
+		for _, line := range lines {
 
-			if len(strs) >= 1 {
-				command = strs[0]
+			prefix := ""
+			command := ""
+			args := ""
+
+			if len(line) >= 1 {
+				prefix = line[:1]
+			} else {
+				continue
 			}
 
-			if len(strs) >= 2 {
-				args = strs[1]
-			}
-		}
+			if len(line) >= 2 {
+				strs := strings.SplitN(line[1:], " ", 2)
 
-		switch prefix {
-		case "?":
-			if !config.DiscordModerators.Contains(author) {
-				s.ChannelMessageSend(m.ChannelID, "no access to moderator commands.")
-				return
+				if len(strs) >= 1 {
+					command = strs[0]
+				}
+
+				if len(strs) == 2 {
+					args = strs[1]
+				}
 			}
-			ModeratorCommandsHandler(s, m, author, command, args)
-		case "#":
-			if author != config.DiscordAdmin {
-				s.ChannelMessageSend(m.ChannelID, "no access to admin commands.")
-				return
+
+			switch prefix {
+			case "?":
+				if !config.DiscordModerators.Contains(author) {
+					s.ChannelMessageSend(m.ChannelID, "no access to moderator commands.")
+					continue
+				}
+				ModeratorCommandsHandler(s, m, author, command, args)
+			case "#":
+				if author != config.DiscordAdmin {
+					s.ChannelMessageSend(m.ChannelID, "no access to admin commands.")
+					continue
+				}
+				AdminCommandsHandler(s, m, author, command, args)
+			default:
+				continue
 			}
-			AdminCommandsHandler(s, m, author, command, args)
-		default:
-			return
+
 		}
 	})
 
