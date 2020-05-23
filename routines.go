@@ -282,10 +282,10 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 		matches = startOptionVote.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 7) {
 			votingID, _ := strconv.Atoi(matches[1])
-			votingName := Escape(matches[2])
+			votingName := matches[2]
 
-			optionName := Escape(matches[3])
-			reason := Escape(matches[4])
+			optionName := matches[3]
+			reason := matches[4]
 
 			forced := matches[6]
 
@@ -295,7 +295,7 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 				forced = ""
 			}
 
-			result = fmt.Sprintf("**[optionvote%s]**: %d:'%s' voted option '%s' with reason '%s'", forced, votingID, votingName, optionName, reason)
+			result = fmt.Sprintf("**[optionvote%s]**: %d:'%s' voted option '%s' with reason '%s'", forced, votingID, Escape(votingName), Escape(optionName), Escape(reason))
 			send = true
 			return
 		}
@@ -303,12 +303,12 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 		matches = startVotekickRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 7) {
 			kickingID, _ := strconv.Atoi(matches[1])
-			kickingName := Escape(matches[2])
+			kickingName := matches[2]
 
 			kickedID, _ := strconv.Atoi(matches[3])
-			kickedName := Escape(matches[4])
+			kickedName := matches[4]
 
-			reason := Escape(matches[5])
+			reason := matches[5]
 			forced := matches[7]
 
 			if forced == "1" {
@@ -317,7 +317,7 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 				forced = ""
 			}
 
-			result = fmt.Sprintf("**[kickvote%s]**: %d:'%s' started to kick %d:'%s' with reason '%s'", forced, kickingID, kickingName, kickedID, kickedName, reason)
+			result = fmt.Sprintf("**[kickvote%s]**: %d:'%s' started to kick %d:'%s' with reason '%s'", forced, kickingID, Escape(kickingName), kickedID, Escape(kickedName), Escape(reason))
 			send = true
 			return
 		}
@@ -325,12 +325,12 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 		matches = startSpecVoteRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 7) {
 			votingID, _ := strconv.Atoi(matches[1])
-			votingName := Escape(matches[2])
+			votingName := matches[2]
 
 			votedID, _ := strconv.Atoi(matches[3])
-			votedName := Escape(matches[4])
+			votedName := matches[4]
 
-			reason := Escape(matches[5])
+			reason := matches[5]
 			forced := matches[7]
 
 			if forced == "1" {
@@ -339,7 +339,7 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 				forced = ""
 			}
 
-			result = fmt.Sprintf("**[specvote%s]**: %d:'%s' wants to move %d:'%s' to spectators with reason '%s'", forced, votingID, votingName, votedID, votedName, reason)
+			result = fmt.Sprintf("**[specvote%s]**: %d:'%s' wants to move %d:'%s' to spectators with reason '%s'", forced, votingID, Escape(votingName), votedID, Escape(votedName), Escape(reason))
 			send = true
 			return
 		}
@@ -401,10 +401,10 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 		matches := chatRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 3) {
 			id, _ := strconv.Atoi(matches[1])
-			name := Escape(matches[2])
-			text := Escape(matches[3])
+			name := matches[2]
+			text := matches[3]
 
-			result = fmt.Sprintf("[chat]: %d:'%s': %s", id, Escape(name), text)
+			result = fmt.Sprintf("[chat]: %d:'%s': %s", id, Escape(name), Escape(text))
 			send = true
 		}
 		return
@@ -412,10 +412,10 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 		matches = teamChatRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 3) {
 			id, _ := strconv.Atoi(matches[1])
-			name := Escape(matches[2])
-			text := Escape(matches[3])
+			name := matches[2]
+			text := matches[3]
 
-			result = fmt.Sprintf("[teamchat]: %d:'%s': %s", id, Escape(name), text)
+			result = fmt.Sprintf("[teamchat]: %d:'%s': %s", id, Escape(name), Escape(text))
 			send = true
 		}
 		return
