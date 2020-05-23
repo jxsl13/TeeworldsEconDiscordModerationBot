@@ -44,13 +44,21 @@ func StatusHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, arg
 	}
 
 	sb := strings.Builder{}
+	sb.Grow(2000)
 	for _, p := range players {
 		suffix := WrapInInlineCodeBlock(fmt.Sprintf("id=%-2d version=%-5x %-20s %-16s", p.ID, p.Version, p.Name, p.Clan))
 		line := fmt.Sprintf("%s %s\n", Flag(p.Country), suffix)
 		sb.WriteString(line)
+
+		if sb.Len() >= 1800 {
+			s.ChannelMessageSend(m.ChannelID, sb.String())
+			sb.Reset()
+		}
 	}
 
-	s.ChannelMessageSend(m.ChannelID, sb.String())
+	if sb.Len() > 0 {
+		s.ChannelMessageSend(m.ChannelID, sb.String())
+	}
 }
 
 // BansHandler shows the server specific bans list.
