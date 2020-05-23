@@ -33,6 +33,9 @@ func Escape(userInput string) string {
 
 // WrapInInlineCodeBlock puts the user input into a inline codeblock that is properly escaped.
 func WrapInInlineCodeBlock(userInput string) (userOutput string) {
+	if len(userInput) == 0 {
+		return ""
+	}
 	numberBackticks := strings.Count(userInput, "`") + 1
 
 	userOutput = userInput

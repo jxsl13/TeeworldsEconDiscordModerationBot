@@ -44,10 +44,15 @@ func StatusHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, arg
 	}
 
 	sb := strings.Builder{}
-	sb.Grow(2000)
+	sb.Grow(64 * len(players))
 	for _, p := range players {
-		suffix := WrapInInlineCodeBlock(fmt.Sprintf("id=%-2d version=%-5x %-20s %-16s", p.ID, p.Version, p.Name, p.Clan))
-		line := fmt.Sprintf("%s %s\n", Flag(p.Country), suffix)
+
+		id := WrapInInlineCodeBlock(strconv.Itoa(p.ID))
+		version := WrapInInlineCodeBlock(fmt.Sprintf("%x", p.Version))
+		name := WrapInInlineCodeBlock(p.Name)
+		clan := WrapInInlineCodeBlock(p.Clan)
+
+		line := fmt.Sprintf("%s id=%-2s v=%-3s %-20s %-16s\n", Flag(p.Country), id, version, name, clan)
 		sb.WriteString(line)
 
 		if sb.Len() >= 1800 {
