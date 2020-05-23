@@ -11,88 +11,71 @@ import (
 )
 
 /*
-// vanilla
-[2019-10-13 03:15:53][server]: player is ready. ClientID=0 addr=127.0.0.1:61292
-[2019-10-13 03:15:53][server]: 'qwertzuio    ' -> 'qwertzuio'
-[2019-10-13 03:15:53][server]: player has entered the game. ClientID=0 addr=127.0.0.1:61292
 
-[2019-10-13 03:16:06][server]: client dropped. cid=0 addr=127.0.0.1:61292 reason=''
 
-// ddrace
-[2020-03-19 12:43:14][server]: player is ready. ClientID=0 addr=<{123.0.0.1:51151}>
-*/
+ */
 
 var (
 	// ErrPlayerNotFound is returned by the ip matching player search function if no player was found.
 	ErrPlayerNotFound = errors.New("player not found")
 
-	// 0: full 1: ID 2: IP
-	playerReadyRegex = regexp.MustCompile(`\[server\]: player is ready. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]*$`)
-
-	// 0 full 1: trimmed nickname
-	playerGetNameRegex = regexp.MustCompile(`\[server\]: '.{0,20}' -> '(.{0,20})'$`)
-
-	// 0: full 1: ID 2: IP
-	playerEnteredRegex = regexp.MustCompile(`\[server\]: player has entered the game. ClientID=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]*$`)
+	// 0: full 1: ID 2: IP 3: port 4: version 5: name 6: clan 7: country
+	playerEnteredRegex = regexp.MustCompile(`id=([\d]+) addr=([a-fA-F0-9\.\:\[\]]+):([\d]+) version=(\d+) name='(.{0,20})' clan='(.{0,16})' country=([-\d]+)$`)
 
 	// 0: full 1: ID 2: IP 3: reason
-	playerLeftRegex = regexp.MustCompile(`\[server\]: client dropped. cid=([\d]+) addr=[^\da-fA-F]*([\d:\.a-fA-F]+)[^\da-fA-F]*:[\d]+[^\da-fA-F]* reason='(.*)'$`)
+	playerLeftRegex = regexp.MustCompile(`id=([\d]+) addr=([a-fA-F0-9\.\:\[\]]+) reason='(.*)'$`)
 
-	banAddRegex   = regexp.MustCompile(`\[net_ban\]: banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
-	banAddIPRegex = regexp.MustCompile(`\[net_ban\]: '(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
+	// logLevel: net_ban
+	banAddRegex   = regexp.MustCompile(`banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
+	banAddIPRegex = regexp.MustCompile(`'(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
 
-	banRemoveIndexRegex = regexp.MustCompile(`\[net_ban\]: unbanned index [\d]+ \('(.+)'\)`)
-	banRemoveIPRegex    = regexp.MustCompile(`\[net_ban\]: unbanned '(.+)'`)
-	banExpiredRegex     = regexp.MustCompile(`\[net_ban\]: ban '(.+)' expired$`)
-	banRemoveAll        = regexp.MustCompile(`\[net_ban\]: unbanned all entries$`)
+	banRemoveIndexRegex = regexp.MustCompile(`unbanned index [\d]+ \('(.+)'\)`)
+	banRemoveIPRegex    = regexp.MustCompile(`unbanned '(.+)'`)
+	banExpiredRegex     = regexp.MustCompile(`ban '(.+)' expired$`)
+	banRemoveAll        = regexp.MustCompile(`unbanned all entries$`)
 )
 
-const (
-	// These states discribe a player's current state
-	stateEmpty         = 0
-	stateReadyNameless = 1
-	stateNamed         = 2
-	stateIngame        = 3
-)
-
-type player struct {
+// Player represents an ingame player.
+type Player struct {
+	ID      int
 	Name    string
 	Clan    string
-	ID      int
-	Address Address
-	State   int
+	Country int
+	IP      string
+	Port    int
+	Version int
 }
 
-func (p *player) Valid() bool {
-	return p.ID >= 0
+// Valid returns true if the player's ID is valid.
+func (p *Player) Valid() bool {
+	return p.ID >= 0 && len(p.IP) > 0 && p.Port > 0
 }
 
-func (p *player) Online() bool {
-	return p.State == stateIngame
-}
-
-func (p *player) Clear() {
+// Clear resets the player to default values except for its ID
+func (p *Player) Clear() {
 	id := p.ID
-	*p = player{}
+	*p = Player{}
 	p.ID = id //ID stays the same
 }
 
-type server struct {
-	sync.RWMutex    // guards slots object
-	players         [64]player
-	lastReadyPlayer int // the last mentioned ready player gets a new nickname
-	BanServer       banServer
-	JoinCallbacks   []playerCallback
-	LeaveCallbacks  []playerCallback
+// Server represents a tracked Teeworlds server
+type Server struct {
+	sync.RWMutex   // guards slots object
+	players        [64]Player
+	BanServer      banServer
+	JoinCallbacks  []PlayerCallback
+	LeaveCallbacks []PlayerCallback
 }
 
-type playerCallback func(player)
+// PlayerCallback is a function that takes a player as parameter.
+type PlayerCallback func(Player)
 
-func newServer() *server {
-	srv := &server{
+// NewServer creates a new empty server
+func NewServer() *Server {
+	srv := &Server{
 		BanServer:      newBanServer(),
-		JoinCallbacks:  make([]playerCallback, 0, 1),
-		LeaveCallbacks: make([]playerCallback, 0, 1),
+		JoinCallbacks:  make([]PlayerCallback, 0, 1),
+		LeaveCallbacks: make([]PlayerCallback, 0, 1),
 	}
 
 	for idx := range srv.players {
@@ -105,46 +88,30 @@ func newServer() *server {
 }
 
 // ParseLine parses a line from econ or logs, which affects the internal server state.
-func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logline string) {
-	if strings.Contains(line, "[server]") {
+func (s *Server) ParseLine(logLevel, logLine string, notify *NotifyMap) (consumed bool, formatedString string) {
 
-		match := []string{}
+	switch logLevel {
+	case "client_enter":
+		match := playerEnteredRegex.FindStringSubmatch(logLine)
+		if len(match) == 8 {
 
-		// this has priority over any other parsed info, as the order might become incorrect
-		// if this is parsed for example after the playerReadyRegex
-		match = playerGetNameRegex.FindStringSubmatch(line)
-		if len(match) == 2 {
-			name := match[1]
-			s.Lock()
-			s.players[s.lastReadyPlayer].Name = name
-			s.players[s.lastReadyPlayer].State = stateNamed
-			s.Unlock()
-			return true, ""
-		}
-
-		// ready client, no name, yet
-		match = playerReadyRegex.FindStringSubmatch(line)
-		if len(match) == 3 {
 			id, _ := strconv.Atoi(match[1])
-			ip := match[2]
-			s.lastReadyPlayer = id
+			port, _ := strconv.Atoi(match[3])
+			version, _ := strconv.Atoi(match[4])
+			country, _ := strconv.Atoi(match[7])
+
+			player := Player{
+				ID:      id,
+				Name:    match[5],
+				Clan:    match[6],
+				Country: country,
+				IP:      match[2],
+				Port:    port,
+				Version: version,
+			}
 
 			s.Lock()
-			s.players[id].Address = Address(ip)
-			s.players[id].State = stateReadyNameless
-			s.Unlock()
-
-			return true, ""
-		}
-
-		// player actually reaches ingame state
-		match = playerEnteredRegex.FindStringSubmatch(line)
-		if len(match) == 3 {
-			id, _ := strconv.Atoi(match[1])
-
-			s.Lock()
-			s.players[id].State = stateIngame
-			player := s.players[id]
+			s.players[id] = player
 			s.Unlock()
 
 			s.handleJoin(player)
@@ -163,7 +130,7 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 						}
 					}
 
-					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", player.Name, id, sb.String())
+					return true, fmt.Sprintf("[server]: '%s' joined the server with id %d\n%s", Escape(player.Name), id, sb.String())
 				}
 
 			}
@@ -174,9 +141,9 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 
 			return true, ""
 		}
-
+	case "client_drop":
 		// player leaves
-		match = playerLeftRegex.FindStringSubmatch(line)
+		match := playerLeftRegex.FindStringSubmatch(logLine)
 		if len(match) == 4 {
 			id, _ := strconv.Atoi(match[1])
 
@@ -191,15 +158,14 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			s.handleLeave(player)
 
 			if config.LogLevel >= 2 {
-				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", player.Name, id)
+				return true, fmt.Sprintf("[server]: '%s' left the server, id was %d", Escape(player.Name), id)
 			}
+			return true, ""
 		}
-	} else if strings.Contains(line, "[net_ban]") {
-		matches := []string{}
-
-		matches = banAddRegex.FindStringSubmatch(line)
+	case "net_ban":
+		matches := banAddRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 3) {
-			ip := Address(matches[1])
+			ip := matches[1]
 			minutes, _ := strconv.Atoi(matches[2])
 			reason := matches[3]
 
@@ -213,9 +179,9 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			return true, fmt.Sprintf("**[bans]**: '%s' banned for %9s with reason: '%s'", p.Name, duration.Round(time.Second), reason)
 		}
 
-		matches = banAddIPRegex.FindStringSubmatch(line)
+		matches = banAddIPRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 3) {
-			ip := Address(matches[1])
+			ip := matches[1]
 			minutes, _ := strconv.Atoi(matches[2])
 			reason := matches[3]
 
@@ -228,9 +194,9 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			return true, fmt.Sprintf("**[bans]**: '%s' banned for %9s with reason: '%s'", p.Name, duration.Round(time.Second), reason)
 		}
 
-		matches = banExpiredRegex.FindStringSubmatch(line)
+		matches = banExpiredRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 1) {
-			ip := Address(matches[1])
+			ip := matches[1]
 
 			ban, err := s.BanServer.UnbanIP(ip)
 
@@ -241,9 +207,9 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			return true, fmt.Sprintf("[bans]: ban of '%s' expired (%s)", ban.Player.Name, ban.Reason)
 		}
 
-		matches = banRemoveIndexRegex.FindStringSubmatch(line)
+		matches = banRemoveIndexRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 1) {
-			ip := Address(matches[1])
+			ip := matches[1]
 
 			ban, err := s.BanServer.UnbanIP(ip)
 
@@ -254,9 +220,9 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			return true, fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
 		}
 
-		matches = banRemoveIPRegex.FindStringSubmatch(line)
+		matches = banRemoveIPRegex.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 1) {
-			ip := Address(matches[1])
+			ip := matches[1]
 
 			ban, err := s.BanServer.UnbanIP(ip)
 
@@ -266,24 +232,22 @@ func (s *server) ParseLine(line string, notify *NotifyMap) (consumed bool, logli
 			return true, fmt.Sprintf("[bans]: unbanned '%s' (%s)", ban.Player.Name, ban.Reason)
 		}
 
-		matches = banRemoveAll.FindStringSubmatch(line)
+		matches = banRemoveAll.FindStringSubmatch(logLine)
 		if len(matches) == 1 {
 			s.BanServer.UnbanAll()
 			return true, fmt.Sprintf("[bans]: unbanned all players.")
 		}
-
 	}
 
 	return false, ""
 }
 
-func (s *server) Player(id int) player {
+// Player returns the player by its ID.
+func (s *Server) Player(id int) Player {
 	if id < 0 || 63 < id {
-		return player{
-			Name:    "(unknown)",
-			Clan:    "",
-			Address: "",
-			ID:      -1,
+		return Player{
+			Name: "(unknown)",
+			ID:   -1,
 		}
 	}
 
@@ -294,32 +258,31 @@ func (s *server) Player(id int) player {
 }
 
 // PlayerByIP returns a dummy player with a negative ID if no player with expected IP was found.
-func (s *server) PlayerByIP(ip Address) player {
+func (s *Server) PlayerByIP(ip string) Player {
 	s.Lock()
 	defer s.Unlock()
 
 	for _, p := range s.players {
-		if p.Online() && p.Address == ip {
+		if p.IP == ip {
 			return p
 		}
 	}
 
-	return player{
-		Name:    "(unknown)",
-		Clan:    "",
-		Address: ip,
-		ID:      -1,
+	return Player{
+		Name: "(unknown)",
+		ID:   -1,
 	}
 }
 
-func (s *server) Status() []player {
-	playerList := make([]player, 0, 32)
+// Status returns a list of all online players
+func (s *Server) Status() []Player {
+	playerList := make([]Player, 0, 32)
 
 	s.RLock()
 	defer s.RUnlock()
 
 	for _, p := range s.players {
-		if p.Online() {
+		if p.Valid() {
 			playerList = append(playerList, p)
 		}
 	}
@@ -327,22 +290,26 @@ func (s *server) Status() []player {
 	return playerList
 }
 
-func (s *server) AddJoinHandler(handler playerCallback) {
+// AddJoinHandler add a new player join handler.
+func (s *Server) AddJoinHandler(handler PlayerCallback) {
 	s.JoinCallbacks = append(s.JoinCallbacks, handler)
 }
 
-func (s *server) AddLeaveHandler(handler playerCallback) {
+// AddLeaveHandler add a new player leaving handler.
+func (s *Server) AddLeaveHandler(handler PlayerCallback) {
 	s.LeaveCallbacks = append(s.LeaveCallbacks, handler)
 }
 
-func (s *server) handleJoin(p player) {
+// calls all callbacks asyncronously, when a player joins.
+func (s *Server) handleJoin(p Player) {
 	for _, cb := range s.JoinCallbacks {
-		go cb(p)
+		cb(p)
 	}
 }
 
-func (s *server) handleLeave(p player) {
+// calls all callbacks asyncronously, when a player leaves.
+func (s *Server) handleLeave(p Player) {
 	for _, cb := range s.LeaveCallbacks {
-		go cb(p)
+		cb(p)
 	}
 }

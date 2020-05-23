@@ -30,16 +30,16 @@ type NicknameTracker struct {
 }
 
 // Add a player to the nickname tracking
-func (n *NicknameTracker) Add(p player) error {
+func (n *NicknameTracker) Add(p Player) error {
 	if n == nil {
 		return nil
 	}
 
 	tx := n.TxPipeline()
 
-	tx.SAdd(string(p.Address), p.Name)
-	tx.Expire(string(p.Address), n.ExpirationDelay)
-	tx.SAdd(p.Name, string(p.Address))
+	tx.SAdd(string(p.IP), p.Name)
+	tx.Expire(string(p.IP), n.ExpirationDelay)
+	tx.SAdd(p.Name, string(p.IP))
 	tx.Expire(p.Name, n.ExpirationDelay)
 
 	_, err := tx.Exec()

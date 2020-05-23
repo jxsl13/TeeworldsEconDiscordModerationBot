@@ -18,7 +18,7 @@ type command struct {
 
 type configuration struct {
 	EconPasswords            map[Address]password
-	ServerStates             map[Address]*server
+	ServerStates             map[Address]*Server
 	ChannelAddress           ChannelAddressMap
 	DiscordToken             string
 	DiscordAdmin             string
@@ -56,10 +56,10 @@ func (c *configuration) GetCommandQueues() []chan command {
 	return cmdQueues
 }
 
-func (c *configuration) GetServers() []*server {
+func (c *configuration) GetServers() []*Server {
 	addresses := c.ChannelAddress.GetAddresses()
 
-	servers := make([]*server, 0, len(addresses))
+	servers := make([]*Server, 0, len(addresses))
 
 	for _, addr := range addresses {
 		servers = append(servers, c.ServerStates[addr])
@@ -71,7 +71,7 @@ func (c *configuration) GetAddressByChannelID(channelID string) (Address, bool) 
 	return c.ChannelAddress.Get(discordChannel(channelID))
 }
 
-func (c *configuration) GetServerByChannelID(channelID string) (*server, bool) {
+func (c *configuration) GetServerByChannelID(channelID string) (*Server, bool) {
 	addr, ok := c.ChannelAddress.Get(discordChannel(channelID))
 	if !ok {
 		return nil, ok

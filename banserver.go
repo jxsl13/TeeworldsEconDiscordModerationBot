@@ -16,27 +16,29 @@ var (
 	ErrInvalidIndex = errors.New("invalid index")
 )
 
-type ban struct {
-	Player    player
+// Ban represents a banned player with the ban expiration and the ban reason.
+type Ban struct {
+	Player    Player
 	ExpiresAt time.Time
 	Reason    string
 }
 
-func (b *ban) Expired() bool {
+// Expired tests if the ban is already expired.
+func (b *Ban) Expired() bool {
 	return time.Now().After(b.ExpiresAt)
 }
 
 type banServer struct {
 	mu      sync.Mutex
-	BanList []ban
+	BanList []Ban
 }
 
-func (b *banServer) GetIDFrom(ip Address) (id int, ok bool) {
+func (b *banServer) GetIDFrom(ip string) (id int, ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	for idx, currBan := range b.BanList {
-		if currBan.Player.Address == ip {
+		if currBan.Player.IP == ip {
 			return idx, true
 		}
 	}
@@ -44,14 +46,14 @@ func (b *banServer) GetIDFrom(ip Address) (id int, ok bool) {
 	return 0, false
 }
 
-func (b *banServer) Ban(p player, duration time.Duration, reason string) {
+func (b *banServer) Ban(p Player, duration time.Duration, reason string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	// overwrite existing ban
 	for idx, currBan := range b.BanList {
-		if currBan.Player.Address == p.Address {
-			b.BanList[idx] = ban{
+		if currBan.Player.IP == p.IP {
+			b.BanList[idx] = Ban{
 				Player:    p,
 				ExpiresAt: time.Now().Add(duration),
 				Reason:    reason,
@@ -61,25 +63,25 @@ func (b *banServer) Ban(p player, duration time.Duration, reason string) {
 	}
 
 	// add new ban
-	b.BanList = append(b.BanList, ban{
+	b.BanList = append(b.BanList, Ban{
 		Player:    p,
 		ExpiresAt: time.Now().Add(duration),
 		Reason:    reason,
 	})
 }
 
-func (b *banServer) GetBan(id int) (foundBan ban, err error) {
+func (b *banServer) GetBan(id int) (foundBan Ban, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if id < 0 || len(b.BanList) <= id {
-		return ban{}, ErrInvalidIndex
+		return Ban{}, ErrInvalidIndex
 	}
 
 	return b.BanList[id], nil
 }
 
-func (b *banServer) GetBanByNameAndReason(name, reason string) (bb ban, ok bool) {
+func (b *banServer) GetBanByNameAndReason(name, reason string) (bb Ban, ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -89,15 +91,15 @@ func (b *banServer) GetBanByNameAndReason(name, reason string) (bb ban, ok bool)
 		}
 	}
 
-	return ban{}, false
+	return Ban{}, false
 }
 
-func (b *banServer) SetPlayerAfterwards(p player) (ok bool) {
+func (b *banServer) SetPlayerAfterwards(p Player) (ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	for idx, ban := range b.BanList {
-		if ban.Player.Address == p.Address {
+		if ban.Player.IP == p.IP {
 			b.BanList[idx].Player = p
 			return true
 		}
@@ -105,13 +107,13 @@ func (b *banServer) SetPlayerAfterwards(p player) (ok bool) {
 	return false
 }
 
-func (b *banServer) UnbanIP(ip Address) (ban, error) {
+func (b *banServer) UnbanIP(ip string) (Ban, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	position := -1
 	for idx, ban := range b.BanList {
-		if ban.Player.Address == ip {
+		if ban.Player.IP == ip {
 			position = idx
 			break
 		}
@@ -123,15 +125,15 @@ func (b *banServer) UnbanIP(ip Address) (ban, error) {
 		return ban, nil
 	}
 
-	return ban{}, ErrNoCorrespondingBanFound
+	return Ban{}, ErrNoCorrespondingBanFound
 }
 
-func (b *banServer) UnbanIndex(index int) (ban, error) {
+func (b *banServer) UnbanIndex(index int) (Ban, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if index < 0 || len(b.BanList)-1 < index {
-		return ban{}, ErrInvalidIndex
+		return Ban{}, ErrInvalidIndex
 	}
 
 	ban := b.BanList[index]
@@ -146,11 +148,11 @@ func (b *banServer) UnbanAll() {
 	b.BanList = b.BanList[:0]
 }
 
-func (b *banServer) Bans() []ban {
+func (b *banServer) Bans() []Ban {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	result := make([]ban, len(b.BanList))
+	result := make([]Ban, len(b.BanList))
 	copy(result, b.BanList)
 	return result
 }
@@ -175,5 +177,5 @@ func (b *banServer) String() string {
 }
 
 func newBanServer() banServer {
-	return banServer{BanList: make([]ban, 0, 8)}
+	return banServer{BanList: make([]Ban, 0, 8)}
 }
