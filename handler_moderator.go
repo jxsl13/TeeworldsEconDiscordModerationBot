@@ -52,7 +52,7 @@ func StatusHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, arg
 		name := WrapInInlineCodeBlock(p.Name)
 		clan := WrapInInlineCodeBlock(p.Clan)
 
-		line := fmt.Sprintf("%s id=%-2s v=%-3s %-20s %-16s\n", Flag(p.Country), id, version, name, clan)
+		line := fmt.Sprintf("%s id=%-4s v=%-5s %-22s %-18s\n", Flag(p.Country), id, version, name, clan)
 		sb.WriteString(line)
 
 		if sb.Len() >= 1800 {
