@@ -26,13 +26,13 @@ var (
 	playerLeftRegex = regexp.MustCompile(`id=([\d]+) addr=([a-fA-F0-9\.\:\[\]]+) reason='(.*)'$`)
 
 	// logLevel: net_ban
-	banAddRegex   = regexp.MustCompile(`banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
-	banAddIPRegex = regexp.MustCompile(`'(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
+	banAddRegex   = regexp.MustCompile(`^banned '(.*)' for ([\d]+) minute[s]? \((.*)\)$`)
+	banAddIPRegex = regexp.MustCompile(`^'(.*)' banned for ([\d]+) minute[s]? \((.*)\)$`)
 
-	banRemoveIndexRegex = regexp.MustCompile(`unbanned index [\d]+ \('(.+)'\)`)
-	banRemoveIPRegex    = regexp.MustCompile(`unbanned '(.+)'`)
-	banExpiredRegex     = regexp.MustCompile(`ban '(.+)' expired$`)
-	banRemoveAll        = regexp.MustCompile(`unbanned all entries$`)
+	banRemoveIndexRegex = regexp.MustCompile(`^unbanned index [\d]+ \('(.+)'\)`)
+	banRemoveIPRegex    = regexp.MustCompile(`^unbanned '(.+)'`)
+	banExpiredRegex     = regexp.MustCompile(`^ban '(.+)' expired$`)
+	banRemoveAll        = regexp.MustCompile(`^unbanned all entries$`)
 )
 
 // Player represents an ingame player.
@@ -271,6 +271,7 @@ func (s *Server) PlayerByIP(ip string) Player {
 	return Player{
 		Name: "(unknown)",
 		ID:   -1,
+		IP:   ip,
 	}
 }
 
