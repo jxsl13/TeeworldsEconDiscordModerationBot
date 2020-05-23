@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	serverMessageWidth = 64 - 3
+	serverMessageWidth = 63 - 3
 )
 
 // Announcement represents an announcement
