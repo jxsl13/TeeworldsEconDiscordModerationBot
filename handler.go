@@ -96,6 +96,8 @@ func AdminCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, auth
 		PurgeSpyHandler(s, m, author, args)
 	case "execute":
 		ExecuteHandler(s, m, author, args)
+	case "bulkmultiban":
+		BulkMultibanHandler(s, m, author, args)
 	default:
 		s.ChannelMessageSend(m.ChannelID, "invalid command: "+cmd)
 	}

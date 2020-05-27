@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
+	"net"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -223,4 +228,78 @@ func ExecuteHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, ar
 	}
 
 	config.DiscordCommandQueue[addr] <- command{Author: author, Command: args}
+}
+
+var bulkBanRegex = regexp.MustCompile(`^(.+) ([\dhmHM]+) (.+)$`)
+
+// BulkMultibanHandler bans all given IPs on all registered and active servers.
+func BulkMultibanHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args string) {
+	// command must be executed in a connected channel.
+	_, ok := config.GetAddressByChannelID(m.ChannelID)
+	if !ok {
+		return
+	}
+
+	matches := bulkBanRegex.FindStringSubmatch(args)
+	if len(matches) != 4 {
+		s.ChannelMessageSend(m.ChannelID, "invalid argument syntax, expected: #bulkmultiban 123.0.0.1 123.0.0.2 123.0.0.3 [...] 1h5m reason for ban")
+		return
+	}
+
+	dirtyIPs := strings.Split(matches[1], " ")
+	durationString := matches[2]
+	reason := matches[3]
+	duration, err := time.ParseDuration(durationString)
+
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("invalid ban duration: %q", durationString))
+		return
+	}
+
+	cleanIPs := make([]net.IP, 0, len(dirtyIPs))
+	invalidIPs := make([]string, 0, 1)
+
+	for _, ip := range dirtyIPs {
+		if parsedIP := net.ParseIP(ip); parsedIP != nil {
+			cleanIPs = append(cleanIPs, parsedIP)
+		} else {
+			invalidIPs = append(invalidIPs, ip)
+		}
+	}
+
+	// sort invalid strings alphabetically
+	sort.Sort(byName(invalidIPs))
+
+	// sort valid IPs in reverse order in order for them to be properly sorted in the banlist
+	sort.Slice(cleanIPs, func(i, j int) bool {
+		return bytes.Compare(cleanIPs[i], cleanIPs[j]) > 0
+	})
+
+	for _, ip := range cleanIPs {
+
+		cmd := command{
+			Author:  author,
+			Command: fmt.Sprintf("ban %s %d %s", ip.String(), int(duration.Minutes()), reason),
+		}
+
+		for _, queue := range config.GetCommandQueues() {
+			queue <- cmd
+		}
+	}
+
+	sb := strings.Builder{}
+
+	// print number of banned valid IPs
+	sb.WriteString(fmt.Sprintf("**Banned IPs**: %d\n", len(cleanIPs)))
+
+	// print invalid IPs
+	sb.WriteString("**Invalid IPs**:\n```\n")
+	for _, ip := range invalidIPs {
+		sb.WriteString(ip)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("```\n")
+
+	// send to channel
+	s.ChannelMessageSend(m.ChannelID, sb.String())
 }
