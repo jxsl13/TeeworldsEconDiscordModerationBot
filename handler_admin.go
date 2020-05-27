@@ -293,12 +293,14 @@ func BulkMultibanHandler(s *discordgo.Session, m *discordgo.MessageCreate, autho
 	sb.WriteString(fmt.Sprintf("**Banned IPs**: %d\n", len(cleanIPs)))
 
 	// print invalid IPs
-	sb.WriteString("**Invalid IPs**:\n```\n")
-	for _, ip := range invalidIPs {
-		sb.WriteString(ip)
-		sb.WriteString("\n")
+	if len(invalidIPs) > 0 {
+		sb.WriteString("**Invalid IPs**:\n```\n")
+		for _, ip := range invalidIPs {
+			sb.WriteString(ip)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("```\n")
 	}
-	sb.WriteString("```\n")
 
 	// send to channel
 	s.ChannelMessageSend(m.ChannelID, sb.String())
