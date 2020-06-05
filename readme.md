@@ -1,6 +1,6 @@
 # TeeworldsEconDiscordModerationBot
 
-The TEDMB is a bot that connects to a Teeworlds server via its external console and writes the log into a dedicated Discord channel.
+The TEDMB is a bot that connects to a Teeworlds server(**zCatch only**, because the vanilla Teeworlds logging is broken) via its external console and writes the log into a dedicated Discord channel.
 The basic workflow is, that the *administrator* of the bot creates a dedicated channel for this bot, preferrably only accessibly by the administrator and his/her moderators team.
 After the channel has been created, the administrator adds the bot to the channel and starts monitoring a specic server by connecting the channel to a specific server.
 This connection is established by the command `#moderate econIP:econPort` and cannot be terminated without restarting the bot itself, meaning this is a one time connection process.
@@ -190,17 +190,15 @@ The IDs shown here are used to remove theannouncements from the list.
 
 Remove the selected ID from the server's announcement list and stop announcing via Teeworlds server messages.
 
-### \#whois \<UNIQUE nickname>
-
-Request for nicknames that have been sharing their IPs with the requested nickname.
-The more unique the requested nickname is, the better the results are, especially when nobody else shares that nickname or fakes it.
-This is usually the case, when a player uses undercover nicknames, but it can also be the case when multiple players, especially siblings share the same network.
-
 ### \#ips \<UNIQUE nickname>
 
 Request a list of unique IPs that the nickname has been seen on the moderated servers.
 The more unique the nickname is, the more accurate the resulting list will be.
 This means, the smaller the chance that a nickname is used by multiple users, the higher the accuracy of the IP list.
+
+### \#bulkmultiban \<IP, IP2, ...> \<duration: 24h22m> \<reason text, must not contain a duration formated substring>
+
+Allows to ban a list of IPs on all servers for a given duration an reason.
 
 ## Moderator commands
 
@@ -243,6 +241,13 @@ Examples:
 Any command specified in the `.env` file within `DISCORD_MODERATOR_COMMANDS` can be used by the administrator and the moderation staff.
 It is possible to specify random commands that the Teeworlds server actually does not know.
 This would lead to moderators being able to execute invalid commands that are not recognized by the Teeworlds server, making it pointless.
+
+### \?whois \<UNIQUE nickname>
+
+*Previously admin only command, but experience shows that this should be accessible for moderators as well.*
+Request for nicknames that have been sharing their IPs with the requested nickname.
+The more unique the requested nickname is, the better the results are, especially when nobody else shares that nickname or fakes it.
+This is usually the case, when a player uses undercover nicknames, but it can also be the case when multiple players, especially siblings share the same network.
 
 ## Important Info
 

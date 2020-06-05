@@ -87,6 +87,7 @@ func init() {
 	config.DiscordModeratorCommands.Add("multiunban")
 	config.DiscordModeratorCommands.Add("notify")
 	config.DiscordModeratorCommands.Add("unnotify")
+	config.DiscordModeratorCommands.Add("whois")
 
 	moderatorRole, ok := env["DISCORD_MODERATOR_ROLE"]
 	if ok && len(moderatorRole) > 0 {

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -28,12 +29,14 @@ func (b *Ban) Expired() bool {
 	return time.Now().After(b.ExpiresAt)
 }
 
-type banServer struct {
+// BanServer handles the ban parsing
+type BanServer struct {
 	mu      sync.Mutex
 	BanList []Ban
 }
 
-func (b *banServer) GetIDFrom(ip string) (id int, ok bool) {
+// GetIDFrom IP looks for the banlist index based on IP
+func (b *BanServer) GetIDFrom(ip string) (id int, ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -46,7 +49,8 @@ func (b *banServer) GetIDFrom(ip string) (id int, ok bool) {
 	return 0, false
 }
 
-func (b *banServer) Ban(p Player, duration time.Duration, reason string) {
+// Ban a player for a specific time and reason.
+func (b *BanServer) Ban(p Player, duration time.Duration, reason string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -58,6 +62,7 @@ func (b *banServer) Ban(p Player, duration time.Duration, reason string) {
 				ExpiresAt: time.Now().Add(duration),
 				Reason:    reason,
 			}
+			sort.Sort(byBantime(b.BanList))
 			return
 		}
 	}
@@ -68,9 +73,11 @@ func (b *banServer) Ban(p Player, duration time.Duration, reason string) {
 		ExpiresAt: time.Now().Add(duration),
 		Reason:    reason,
 	})
+	sort.Sort(byBantime(b.BanList))
 }
 
-func (b *banServer) GetBan(id int) (foundBan Ban, err error) {
+// GetBan by ID
+func (b *BanServer) GetBan(id int) (foundBan Ban, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -81,7 +88,8 @@ func (b *banServer) GetBan(id int) (foundBan Ban, err error) {
 	return b.BanList[id], nil
 }
 
-func (b *banServer) GetBanByNameAndReason(name, reason string) (bb Ban, ok bool) {
+// GetBanByNameAndReason returns a ban that has a specific reason and a specific player name.
+func (b *BanServer) GetBanByNameAndReason(name, reason string) (bb Ban, ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -94,7 +102,8 @@ func (b *banServer) GetBanByNameAndReason(name, reason string) (bb Ban, ok bool)
 	return Ban{}, false
 }
 
-func (b *banServer) SetPlayerAfterwards(p Player) (ok bool) {
+// SetPlayerAfterwards associates a new player object with a ban if the IPs of both match.
+func (b *BanServer) SetPlayerAfterwards(p Player) (ok bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -107,7 +116,8 @@ func (b *banServer) SetPlayerAfterwards(p Player) (ok bool) {
 	return false
 }
 
-func (b *banServer) UnbanIP(ip string) (Ban, error) {
+// UnbanIP removes a ban.
+func (b *BanServer) UnbanIP(ip string) (Ban, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -128,7 +138,8 @@ func (b *banServer) UnbanIP(ip string) (Ban, error) {
 	return Ban{}, ErrNoCorrespondingBanFound
 }
 
-func (b *banServer) UnbanIndex(index int) (Ban, error) {
+// UnbanIndex removes a ban by its index.
+func (b *BanServer) UnbanIndex(index int) (Ban, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -141,14 +152,16 @@ func (b *banServer) UnbanIndex(index int) (Ban, error) {
 	return ban, nil
 }
 
-func (b *banServer) UnbanAll() {
+// UnbanAll empties the banlist.
+func (b *BanServer) UnbanAll() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.BanList = b.BanList[:0]
 }
 
-func (b *banServer) Bans() []Ban {
+// Bans returns a list of all bans.
+func (b *BanServer) Bans() []Ban {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -157,13 +170,15 @@ func (b *banServer) Bans() []Ban {
 	return result
 }
 
-func (b *banServer) Size() int {
+// Size returns the number of current bans.
+func (b *BanServer) Size() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return len(b.BanList)
 }
 
-func (b *banServer) String() string {
+// String formats the banlist properly.
+func (b *BanServer) String() string {
 	bans := b.Bans()
 
 	sb := strings.Builder{}
@@ -176,6 +191,6 @@ func (b *banServer) String() string {
 
 }
 
-func newBanServer() banServer {
-	return banServer{BanList: make([]Ban, 0, 8)}
+func newBanServer() BanServer {
+	return BanServer{BanList: make([]Ban, 0, 8)}
 }

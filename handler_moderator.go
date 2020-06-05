@@ -179,3 +179,28 @@ func UnnotifyHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, a
 	confirmationMessage := fmt.Sprintf("Removed all of %s's notification requests.", m.Author.Mention())
 	s.ChannelMessageSend(m.ChannelID, confirmationMessage)
 }
+
+// WhoisHandler associates different nicknames to each other based on IPs. This allows
+// to check, if a specific player is already known under a different nickname.
+func WhoisHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args string) {
+	nickname := strings.TrimSpace(args)
+	if config.NicknameTracker == nil {
+		s.ChannelMessageSend(m.ChannelID, "nickname tracking is disabled.")
+		return
+	}
+
+	nicknames, err := config.NicknameTracker.WhoIs(nickname)
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, err.Error())
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString("**Known nicknames**:\n```\n")
+	for _, nick := range nicknames {
+		sb.WriteString(nick)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("```\n")
+	s.ChannelMessageSend(m.ChannelID, sb.String())
+}

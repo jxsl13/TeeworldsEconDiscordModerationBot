@@ -62,7 +62,7 @@ func (p *Player) Clear() {
 type Server struct {
 	sync.RWMutex   // guards slots object
 	players        [64]Player
-	BanServer      banServer
+	BanServer      BanServer
 	JoinCallbacks  []PlayerCallback
 	LeaveCallbacks []PlayerCallback
 }

@@ -29,7 +29,7 @@ func AdminMessageCreateMiddleware(next MessageCommandHandler) MessageCommandHand
 func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, cmd, args string) {
 	addr, ok := config.GetAddressByChannelID(m.ChannelID)
 	if !ok {
-		log.Printf("Request from invalid channel by user %s", m.Author.String())
+		log.Printf("Request from invalid channel by user %s", author)
 		return
 	}
 
@@ -57,6 +57,8 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 		NotifyHandler(s, m, author, args)
 	case "unnotify":
 		UnnotifyHandler(s, m, author, args)
+	case "whois":
+		WhoisHandler(s, m, author, args)
 	default:
 		// send other messages this way
 		config.DiscordCommandQueue[addr] <- command{Author: author, Command: fmt.Sprintf("%s %s", cmd, args)}
@@ -68,8 +70,6 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 func AdminCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, cmd, args string) {
 
 	switch cmd {
-	case "whois":
-		WhoisHandler(s, m, author, args)
 	case "ips":
 		IPsHandler(s, m, author, args)
 	case "announce":
