@@ -50,14 +50,14 @@ var (
 )
 
 func serverRoutine(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate, addr Address, pass password) {
+	// sub goroutines
+	routineContext, routineCancel := context.WithCancel(ctx)
+	defer routineCancel()
+
 	// channel - server association
 	defer config.ChannelAddress.RemoveAddress(addr)
 	defer s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Stopped listening to server %s", addr))
 	initialMessageID := m.ID
-
-	// sub goroutines
-	routineContext, routineCancel := context.WithCancel(ctx)
-	defer routineCancel()
 
 	config.AnnouncemenServers[addr] = NewAnnouncementServer(routineContext, config.DiscordCommandQueue[addr])
 
@@ -82,13 +82,26 @@ func serverRoutine(ctx context.Context, s *discordgo.Session, m *discordgo.Messa
 	result := make(chan string)
 	defer close(result)
 
+	econReaderStopped := false
+
 	for {
 
 		// start routine for waiting for line
 		go func() {
 			line, err := conn.ReadLine()
+
 			if err != nil {
-				log.Println("Closing econ reader routine of:", addr)
+
+				select {
+				case <-ctx.Done():
+					log.Println("Closing econ reader routine of:", addr, " : ", err.Error())
+				default:
+					if !econReaderStopped {
+						s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("econ linereder routine stopped unexpectedly: %s", err.Error()))
+					}
+					econReaderStopped = true
+				}
+
 				// intended
 				return
 			}
