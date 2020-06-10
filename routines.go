@@ -82,31 +82,27 @@ func serverRoutine(ctx context.Context, s *discordgo.Session, m *discordgo.Messa
 	result := make(chan string)
 	defer close(result)
 
-	econReaderStopped := false
+	// start routine for waiting for line
+	go func(ctx context.Context, conn *econ.Conn) {
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("Closing econ reader routine of:", addr, " : ", err.Error())
+				return
+			default:
+				line, err := conn.ReadLine()
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("econ read error: %s", err.Error()))
+					continue
+				}
+				result <- line
+			}
+		}
+
+	}(ctx, conn)
 
 	for {
-
-		// start routine for waiting for line
-		go func() {
-			line, err := conn.ReadLine()
-
-			if err != nil {
-
-				select {
-				case <-ctx.Done():
-					log.Println("Closing econ reader routine of:", addr, " : ", err.Error())
-				default:
-					if !econReaderStopped {
-						s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("econ linereder routine stopped unexpectedly: %s", err.Error()))
-					}
-					econReaderStopped = true
-				}
-
-				// intended
-				return
-			}
-			result <- line
-		}()
 
 		// wait for read or abort
 		select {
