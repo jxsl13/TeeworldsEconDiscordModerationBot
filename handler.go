@@ -71,7 +71,7 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 func AdminCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, cmd, args string) {
 
 	addr, ok := config.GetAddressByChannelID(m.ChannelID)
-	if !ok {
+	if !ok && cmd != "moderate" {
 		log.Printf("Request from invalid channel by user %s", author)
 		return
 	}
