@@ -43,16 +43,26 @@ func StatusHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, arg
 		return
 	}
 
+	canSeeIPs := (args == "ips" || args == "ip") && config.DiscordAdmin == author
+
 	sb := strings.Builder{}
-	sb.Grow(64 * len(players))
+	sb.Grow(128 * len(players))
+	line := ""
+
 	for _, p := range players {
 
 		id := WrapInInlineCodeBlock(strconv.Itoa(p.ID))
+		ip := WrapInInlineCodeBlock(p.IP)
 		version := WrapInInlineCodeBlock(fmt.Sprintf("%x", p.Version))
 		name := WrapInInlineCodeBlock(p.Name)
 		clan := WrapInInlineCodeBlock(p.Clan)
 
-		line := fmt.Sprintf("%s id=%-4s v=%-5s %-22s %-18s\n", Flag(p.Country), id, version, name, clan)
+		if canSeeIPs {
+			line = fmt.Sprintf("%s id=%-4s ip=%-16s v=%-5s %-22s %-18s\n", Flag(p.Country), id, ip, version, name, clan)
+		} else {
+			line = fmt.Sprintf("%s id=%-4s v=%-5s %-22s %-18s\n", Flag(p.Country), id, version, name, clan)
+		}
+
 		sb.WriteString(line)
 
 		if sb.Len() >= 1800 {
