@@ -65,7 +65,7 @@ MODERATOR_MENTION_DELAY=5m
 
 # this is a list of commands that can be used by moderators from the discord logging channels.
 # you need to explicitly give access to these commands: help status bans multiban multiunban notify unnotify
-DISCORD_MODERATOR_COMMANDS="help status bans multiban multiunban notify unnotify vote say mute unmute mutes voteban unvoteban unvoteban_client votebans kick ban unban set_team"
+DISCORD_MODERATOR_COMMANDS="help status bans multiban multiunban notify unnotify vote say mute unmute mutes voteban unvoteban unvoteban_client votebans kick ban unban set_team force"
 
 # if either a kickvote or spectator vote is started, the bot creates reactions that can be used to
 # abort the votes forcefully by reacting to the votes. Below you can see the expected emoji format.
@@ -245,7 +245,6 @@ This would lead to moderators being able to execute invalid commands that are no
 
 ### \?whois \<UNIQUE nickname>
 
-*Previously admin only command, but experience shows that this should be accessible for moderators as well.*
 Request for nicknames that have been sharing their IPs with the requested nickname.
 The more unique the requested nickname is, the better the results are, especially when nobody else shares that nickname or fakes it.
 This is usually the case, when a player uses undercover nicknames, but it can also be the case when multiple players, especially siblings share the same network.
