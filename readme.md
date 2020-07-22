@@ -64,7 +64,8 @@ DISCORD_MODERATOR_ROLE="Server Moderator"
 MODERATOR_MENTION_DELAY=5m
 
 # this is a list of commands that can be used by moderators from the discord logging channels.
-DISCORD_MODERATOR_COMMANDS="status vote say mute unmute mutes voteban unvoteban unvoteban_client votebans kick ban unban bans set_team"
+# you need to explicitly give access to these commands: help status bans multiban multiunban notify unnotify
+DISCORD_MODERATOR_COMMANDS="help status bans multiban multiunban notify unnotify vote say mute unmute mutes voteban unvoteban unvoteban_client votebans kick ban unban set_team"
 
 # if either a kickvote or spectator vote is started, the bot creates reactions that can be used to
 # abort the votes forcefully by reacting to the votes. Below you can see the expected emoji format.
