@@ -245,6 +245,7 @@ This would lead to moderators being able to execute invalid commands that are no
 
 ### \?whois \<UNIQUE nickname>
 
+*Previously admin only command, but experience shows that this should be accessible for moderators as well.*
 Request for nicknames that have been sharing their IPs with the requested nickname.
 The more unique the requested nickname is, the better the results are, especially when nobody else shares that nickname or fakes it.
 This is usually the case, when a player uses undercover nicknames, but it can also be the case when multiple players, especially siblings share the same network.
