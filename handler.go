@@ -58,6 +58,8 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 		NotifyHandler(s, m, author, args)
 	case "unnotify":
 		UnnotifyHandler(s, m, author, args)
+	case "whois":
+		WhoisHandler(s, m, author, args)
 	default:
 
 		// other command sprefixed with ? and that moderators
