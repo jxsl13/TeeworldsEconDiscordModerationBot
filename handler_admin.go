@@ -29,6 +29,11 @@ func IPsHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args s
 		return
 	}
 
+	if len(ips) == 0 {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**Unknown nickname** `%s`, did not find any IPs.", nickname))
+		return
+	}
+
 	var sb strings.Builder
 	sb.WriteString("**Known IPs**:\n```\n")
 	for _, ip := range ips {
