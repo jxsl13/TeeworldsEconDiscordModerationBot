@@ -28,7 +28,7 @@ func HelpHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args 
 	}
 	sb.WriteString("```")
 
-	s.ChannelMessageSend(m.ChannelID, sb.String())
+	SplitChannelMessageSend(s, m, sb.String())
 }
 
 // StatusHandler handles the ?status command
@@ -64,16 +64,9 @@ func StatusHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, arg
 		}
 
 		sb.WriteString(line)
-
-		if sb.Len() >= 1800 {
-			s.ChannelMessageSend(m.ChannelID, sb.String())
-			sb.Reset()
-		}
 	}
 
-	if sb.Len() > 0 {
-		s.ChannelMessageSend(m.ChannelID, sb.String())
-	}
+	SplitChannelMessageSend(s, m, sb.String())
 }
 
 // BansHandler shows the server specific bans list.
@@ -91,7 +84,8 @@ func BansHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args 
 		return
 	}
 	msg := fmt.Sprintf("[banlist]: %d ban(s)\n```%s```\n", numBans, banSrv.String())
-	s.ChannelMessageSend(m.ChannelID, msg)
+
+	SplitChannelMessageSend(s, m, msg)
 }
 
 // MultiBanHandler allows to ban a specific player on all moderated servers at once.

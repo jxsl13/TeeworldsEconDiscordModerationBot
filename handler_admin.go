@@ -36,7 +36,8 @@ func IPsHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args s
 		sb.WriteString("\n")
 	}
 	sb.WriteString("```\n")
-	s.ChannelMessageSend(m.ChannelID, sb.String())
+
+	SplitChannelMessageSend(s, m, sb.String())
 }
 
 // AnnounceHandler allows to add a server specific announcement.
@@ -84,7 +85,7 @@ func AnnouncementsHandler(s *discordgo.Session, m *discordgo.MessageCreate, auth
 		return
 	}
 
-	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Announcements:\n%s", as.String()))
+	SplitChannelMessageSend(s, m, fmt.Sprintf("Announcements:\n%s", as.String()))
 }
 
 // AddHandler adds a moderator to the moderators list.
@@ -278,5 +279,5 @@ func BulkMultibanHandler(s *discordgo.Session, m *discordgo.MessageCreate, autho
 	}
 
 	// send to channel
-	s.ChannelMessageSend(m.ChannelID, sb.String())
+	SplitChannelMessageSend(s, m, sb.String())
 }
