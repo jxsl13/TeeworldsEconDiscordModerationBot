@@ -59,7 +59,6 @@ func (a *ChannelAddressMap) RemoveAddress(addr Address) {
 			break
 		}
 	}
-	return
 }
 
 // RemoveChannel removes channel address from mapping
@@ -68,7 +67,6 @@ func (a *ChannelAddressMap) RemoveChannel(chann discordChannel) {
 	defer a.mu.Unlock()
 
 	delete(a.m, chann)
-	return
 }
 
 // AlreadyRegistered checks if a server address is already registered to a discord channel.

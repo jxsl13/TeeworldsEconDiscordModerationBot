@@ -66,7 +66,6 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 		//have access to are directly passed to the external console
 		config.DiscordCommandQueue[addr] <- command{Author: author, Command: fmt.Sprintf("%s %s", cmd, args)}
 	}
-	return
 }
 
 // AdminCommandsHandler handles the commands of the admin.
