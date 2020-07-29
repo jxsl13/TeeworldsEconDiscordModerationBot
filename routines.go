@@ -287,7 +287,7 @@ func parseEconLine(line string, server *Server) (result string, send bool) {
 			return
 		}
 
-		matches := []string{}
+		var matches []string
 		matches = startOptionVote.FindStringSubmatch(logLine)
 		if len(matches) == (1 + 7) {
 			votingID, _ := strconv.Atoi(matches[1])
