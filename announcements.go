@@ -58,7 +58,7 @@ func (a *Announcement) parse(line string) error {
 func sendText(cmdQueue chan<- command, text string) {
 	words := strings.Split(text, " ")
 
-	if len(text) == 0 {
+	if text == "" {
 		return
 	}
 

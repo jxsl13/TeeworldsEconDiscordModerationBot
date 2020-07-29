@@ -151,7 +151,7 @@ func CleanHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args
 
 // ModerateHandler starts the connection between the game server and discord.
 func ModerateHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args string) {
-	if len(args) == 0 {
+	if args == "" {
 		s.ChannelMessageSend(m.ChannelID, "please pass your server econ address.")
 		return
 	}

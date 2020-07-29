@@ -43,13 +43,13 @@ func init() {
 
 	discordToken, ok := env["DISCORD_TOKEN"]
 
-	if !ok || len(discordToken) == 0 {
+	if !ok || discordToken == "" {
 		log.Fatal("error: no DISCORD_TOKEN specified")
 	}
 	config.DiscordToken = discordToken
 
 	discordAdmin, ok := env["DISCORD_ADMIN"]
-	if !ok || len(discordAdmin) == 0 {
+	if !ok || discordAdmin == "" {
 		log.Fatal("error: no DISCORD_ADMIN specified")
 	}
 	config.DiscordAdmin = discordAdmin
@@ -57,12 +57,12 @@ func init() {
 
 	econServers, ok := env["ECON_ADDRESSES"]
 
-	if !ok || len(econServers) == 0 {
+	if !ok || econServers == "" {
 		log.Fatal("error: no ECON_ADDRESSES specified")
 	}
 
 	econPasswords, ok := env["ECON_PASSWORDS"]
-	if !ok || len(econPasswords) == 0 {
+	if !ok || econPasswords == "" {
 		log.Fatal("error: no ECON_PASSWORDS specified")
 	}
 
@@ -90,7 +90,7 @@ func init() {
 	config.DiscordModeratorCommands.Add("whois")
 
 	moderatorRole, ok := env["DISCORD_MODERATOR_ROLE"]
-	if ok && len(moderatorRole) > 0 {
+	if ok && moderatorRole != "" {
 		config.DiscordModeratorRole = moderatorRole
 	}
 
@@ -109,7 +109,7 @@ func init() {
 	}
 
 	delayString, ok := env["MODERATOR_MENTION_DELAY"]
-	if !ok || len(delayString) == 0 {
+	if !ok || delayString == "" {
 		delayString = "5m"
 	}
 

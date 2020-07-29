@@ -17,7 +17,7 @@ type MessageCommandMiddleware func(MessageCommandHandler) MessageCommandHandler
 func AdminMessageCreateMiddleware(next MessageCommandHandler) MessageCommandHandler {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate, author, command, args string) {
 
-		if len(config.DiscordAdmin) == 0 || m.Author.String() != config.DiscordAdmin {
+		if config.DiscordAdmin == "" || m.Author.String() != config.DiscordAdmin {
 			s.ChannelMessageSend(m.ChannelID, "you are not allowed to access this command.")
 			return
 		}
@@ -33,7 +33,7 @@ func ModeratorCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, 
 		return
 	}
 
-	if len(cmd) == 0 {
+	if cmd == "" {
 		return
 	}
 
@@ -77,7 +77,7 @@ func AdminCommandsHandler(s *discordgo.Session, m *discordgo.MessageCreate, auth
 		return
 	}
 
-	if len(cmd) == 0 {
+	if cmd == "" {
 		return
 	}
 
