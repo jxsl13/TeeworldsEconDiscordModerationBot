@@ -262,7 +262,7 @@ func (s *Server) PlayerByIP(ip string) Player {
 	s.Lock()
 	defer s.Unlock()
 
-	for _, p := range s.players {
+	for _, p := range &s.players {
 		if p.IP == ip {
 			return p
 		}
@@ -282,7 +282,7 @@ func (s *Server) Status() []Player {
 	s.RLock()
 	defer s.RUnlock()
 
-	for _, p := range s.players {
+	for _, p := range &s.players {
 		if p.Valid() {
 			playerList = append(playerList, p)
 		}
