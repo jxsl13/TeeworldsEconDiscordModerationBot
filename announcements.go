@@ -173,12 +173,12 @@ func (as *AnnouncementServer) Get(index int) (Announcement, error) {
 
 	original := as.announcements[index]
 
-	copy := Announcement{
+	cpy := Announcement{
 		Delay:   original.Delay,
 		Message: original.Message,
 	}
 
-	return copy, nil
+	return cpy, nil
 }
 
 // Delete removes a specific announcement from the list
@@ -193,13 +193,13 @@ func (as *AnnouncementServer) Delete(index int) (Announcement, error) {
 	a := as.announcements[index]
 
 	// create copy without cancel & context
-	copy := Announcement{
+	cpy := Announcement{
 		Delay:   a.Delay,
 		Message: a.Message,
 	}
 
 	as.announcements = append(as.announcements[:index], as.announcements[index+1:]...)
-	return copy, nil
+	return cpy, nil
 }
 
 func (as *AnnouncementServer) String() string {
