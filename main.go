@@ -307,7 +307,8 @@ func main() {
 
 	err = dg.Open()
 	if err != nil {
-		log.Fatalf("error: could not establish a connection to the discord api, please check your credentials")
+		log.Println("error: could not establish a connection to the discord api, please check your credentials")
+		return
 	}
 	defer dg.Close()
 
