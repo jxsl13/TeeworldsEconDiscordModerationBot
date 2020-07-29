@@ -201,7 +201,7 @@ func init() {
 		config.SetUnbanEmoji("❎")
 	}
 
-	trackNicks, _ := env["NICKNAME_TRACKING"]
+	trackNicks := env["NICKNAME_TRACKING"]
 	areNicksTracked := false
 	switch strings.ToLower(trackNicks) {
 	case "":
@@ -224,7 +224,7 @@ func init() {
 			redisAddress = "localhost:6379"
 		}
 
-		redisPassword, _ := env["REDIS_PASSWORD"]
+		redisPassword := env["REDIS_PASSWORD"]
 
 		expirationString, ok := env["NICKNAME_EXPIRATION"]
 		if !ok {
