@@ -184,7 +184,10 @@ func (b *BanServer) String() string {
 	sb := strings.Builder{}
 
 	for idx, ban := range bans {
-		sb.WriteString(fmt.Sprintf("idx=%-2d %9s '%s' (%s)\n", idx, ban.ExpiresAt.Sub(time.Now()).Round(time.Second), ban.Player.Name, ban.Reason))
+		banTimeLeftSeconds := time.Until(ban.ExpiresAt).Round(time.Second)
+		name := ban.Player.Name
+		reason := ban.Reason
+		sb.WriteString(fmt.Sprintf("idx=%-2d %9s '%s' (%s)\n", idx, banTimeLeftSeconds, name, reason))
 	}
 
 	return sb.String()
