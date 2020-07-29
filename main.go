@@ -204,15 +204,7 @@ func init() {
 	trackNicks := env["NICKNAME_TRACKING"]
 	areNicksTracked := false
 	switch strings.ToLower(trackNicks) {
-	case "":
-		fallthrough
-	case "0":
-		fallthrough
-	case "false":
-		fallthrough
-	case "disable":
-		fallthrough
-	case "disabled":
+	case "", "0", "false", "disable", "disabled":
 		areNicksTracked = false
 	default:
 		areNicksTracked = true
