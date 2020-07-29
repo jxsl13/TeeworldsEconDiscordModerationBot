@@ -143,8 +143,6 @@ func CleanHandler(s *discordgo.Session, m *discordgo.MessageCreate, author, args
 			s.ChannelMessageDelete(msg.ChannelID, msg.ID)
 			return
 		}
-
-		initialID = msgIDs[len(msgIDs)-1]
 	}
 
 	s.ChannelMessageDelete(msg.ChannelID, msg.ID)
