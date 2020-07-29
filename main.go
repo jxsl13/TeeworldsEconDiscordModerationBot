@@ -245,7 +245,8 @@ func main() {
 
 	dg, err := discordgo.New("Bot " + config.DiscordToken)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 
 	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
