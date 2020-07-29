@@ -243,7 +243,9 @@ func commandQueueRoutine(routineContext context.Context, s *discordgo.Session, c
 				continue
 			}
 			if send {
-				conn.WriteLine(fmt.Sprintf("echo [Discord] user '%s' executed rcon '%s'", strings.Replace(cmd.Author, "#", "_", -1), lineToExecute))
+				escapedNick := strings.Replace(cmd.Author, "#", "_", -1)
+				logLine := fmt.Sprintf("echo [Discord] user '%s' executed rcon '%s'", escapedNick, lineToExecute)
+				conn.WriteLine(logLine)
 				conn.WriteLine(lineToExecute)
 			}
 		}
