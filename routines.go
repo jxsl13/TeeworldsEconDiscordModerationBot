@@ -84,6 +84,8 @@ func serverRoutine(ctx context.Context, s *discordgo.Session, m *discordgo.Messa
 
 	// start routine for waiting for line
 	go func(ctx context.Context, conn *econ.Conn) {
+		// set log level of server. in order to parse it directly after connection.
+		conn.WriteLine("ec_output_level 2")
 
 		for {
 			select {
