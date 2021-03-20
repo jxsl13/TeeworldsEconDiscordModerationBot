@@ -29,11 +29,11 @@ var (
 	executeRconCommand = regexp.MustCompile(`ClientID=(\d+) rcon='(.*)'$`)
 
 	// logLevel: chat
-	chatRegex = regexp.MustCompile(`([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	chatRegex = regexp.MustCompile(`([-\d]+):[-\d]+:(.{1,16}): (.*)$`)
 	// logLevel: teamchat
-	teamChatRegex = regexp.MustCompile(`([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	teamChatRegex = regexp.MustCompile(`([-\d]+):[-\d]+:(.{1,16}): (.*)$`)
 	// logLevel: whisper
-	whisperRegex = regexp.MustCompile(`([\d]+):[\d]+:(.{1,16}): (.*)$`)
+	whisperRegex = regexp.MustCompile(`([-\d]+):[-\d]+:(.{1,16}): (.*)$`)
 
 	// logLevel: net_ban
 	bansErrorRegex = regexp.MustCompile(`(.*error.*)$`)
