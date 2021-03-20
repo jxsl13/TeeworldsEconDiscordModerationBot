@@ -23,8 +23,8 @@ github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoA
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/joho/godotenv v1.3.0 h1:Zjp+RcGpHhGlrMbJzXTrZZPrWj+1vfm90La1wgB6Bhc=
 github.com/joho/godotenv v1.3.0/go.mod h1:7hK45KPybAkOC6peb+G5yklZfMxEjkZhHbwpqxOKXbg=
-github.com/jxsl13/twapi v1.1.2 h1:4tZfnC2LHIYCOpELW5MAFmjzM+HlGce2R+3xmqXJHLI=
-github.com/jxsl13/twapi v1.1.2/go.mod h1:IpY3prUieWgDAyua1CezhWESHGh+rc/Rzrco98j+Azg=
+github.com/jxsl13/twapi v1.2.1 h1:JfOlwn/kJMkGPn842/WRrcvDYYlcjx6LiGqmWgKYoiE=
+github.com/jxsl13/twapi v1.2.1/go.mod h1:IpY3prUieWgDAyua1CezhWESHGh+rc/Rzrco98j+Azg=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
