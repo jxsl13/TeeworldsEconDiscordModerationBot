@@ -268,7 +268,7 @@ func parseCommandLine(cmd string) (line string, send bool, err error) {
 
 func parseEconLine(line string, server *Server) (result string, send bool) {
 
-	matches := []string{}
+	var matches []string
 	logLevel := ""
 	logLine := ""
 
