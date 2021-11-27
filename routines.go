@@ -268,13 +268,14 @@ func parseCommandLine(cmd string) (line string, send bool, err error) {
 
 func parseEconLine(line string, server *Server) (result string, send bool) {
 
+	matches := []string{}
 	logLevel := ""
 	logLine := ""
 
-	if matches := initialLoglevelRegex.FindStringSubmatch(line); len(matches) > 0 {
+	if matches = initialLoglevelRegex.FindStringSubmatch(line); len(matches) > 0 {
 		logLevel = matches[2]
 		logLine = matches[3]
-	} else if matches := initial06LoglevelRegex.FindStringSubmatch(line); len(matches) > 0 {
+	} else if matches = initial06LoglevelRegex.FindStringSubmatch(line); len(matches) > 0 {
 		logLevel = matches[1]
 		logLine = matches[2]
 	} else {
