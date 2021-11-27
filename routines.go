@@ -18,6 +18,11 @@ var (
 	// 0: full 1: timestamp 2: log level 3: log line
 	initialLoglevelRegex = regexp.MustCompile(`\[([\d -:]+)\]\[([^:]+)\]: (.+)$`)
 
+	// no timestamp
+	// [client_enter]: id=0 addr=192.168.178.25:64139 version=1796 name='MisterFister:(' clan='FistingTea`' country=-1
+	// 0: full 1: log level 2: log line
+	initial06LoglevelRegex = regexp.MustCompile(`\[([^:]+)\]: (.+)$`)
+
 	// logLevel: server
 	startVotekickRegex = regexp.MustCompile(`'([\d]{1,2}):(.*)' voted kick '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
 	startSpecVoteRegex = regexp.MustCompile(`'([\d]{1,2}):(.*)' voted spectate '([\d]{1,2}):(.*)' reason='(.{1,20})' cmd='(.*)' force=([\d])`)
@@ -263,13 +268,18 @@ func parseCommandLine(cmd string) (line string, send bool, err error) {
 
 func parseEconLine(line string, server *Server) (result string, send bool) {
 
-	matches := initialLoglevelRegex.FindStringSubmatch(line)
-	if len(matches) != 4 {
+	logLevel := ""
+	logLine := ""
+
+	if matches := initialLoglevelRegex.FindStringSubmatch(line); len(matches) > 0 {
+		logLevel = matches[2]
+		logLine = matches[3]
+	} else if matches := initial06LoglevelRegex.FindStringSubmatch(line); len(matches) > 0 {
+		logLevel = matches[1]
+		logLine = matches[2]
+	} else {
 		return "", false
 	}
-
-	logLevel := matches[2]
-	logLine := matches[3]
 
 	switch logLevel {
 	case "client_enter", "client_drop":
